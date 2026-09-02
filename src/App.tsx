@@ -105,24 +105,26 @@ const LandingPage: React.FC<{
         </div>
       </div>
 
-      <button 
-        className={`main-menu-history-bar ${!isElectron ? 'single-card' : ''}`}
-        onClick={onHistoryClick}
-      >
-        <div className="history-bar-left">
-          <div className="history-bar-icon-wrap">
-            <History size={20} />
+      {isElectron && (
+        <button 
+          className="main-menu-history-bar"
+          onClick={onHistoryClick}
+        >
+          <div className="history-bar-left">
+            <div className="history-bar-icon-wrap">
+              <History size={20} />
+            </div>
+            <div className="history-bar-text">
+              <span className="history-bar-title">Case History</span>
+              <span className="history-bar-desc">View past practice sessions, notes, and performance</span>
+            </div>
           </div>
-          <div className="history-bar-text">
-            <span className="history-bar-title">Case History</span>
-            <span className="history-bar-desc">View past practice sessions, notes, and performance</span>
+          <div className="history-bar-right">
+            <span>Open</span>
+            <ChevronRight size={18} className="history-bar-arrow" />
           </div>
-        </div>
-        <div className="history-bar-right">
-          <span>Open</span>
-          <ChevronRight size={18} className="history-bar-arrow" />
-        </div>
-      </button>
+        </button>
+      )}
     </div>
   );
 };
