@@ -27,6 +27,17 @@ const formatTime = (s: number) => {
 
 const getDifficultyClass = (diff: number) => `diff-${diff}`;
 
+const getDifficultyColor = (diff: number) => {
+  switch (diff) {
+    case 1: return '#22c55e'; // Green
+    case 2: return '#84cc16'; // Lime
+    case 3: return '#eab308'; // Yellow
+    case 4: return '#f97316'; // Orange
+    case 5: return '#ef4444'; // Red
+    default: return '#cbd5e1';
+  }
+};
+
 const getTypeColorClass = (type: string) => {
   switch (type) {
     case 'M&A': return 'm-a';
@@ -327,66 +338,57 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
     const partnerString = getPartnerString();
     return (
       <div className="landing-container">
-        <div className="loader-container" style={{ maxWidth: '440px' }}>
-          <h2 style={{ marginBottom: '0.25rem' }}>Session Complete</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
-            <strong>{caseFile.title}</strong>
-            {partnerString && <span> with <strong>{partnerString}</strong></span>}
-          </p>
-          {seconds > 0 && (
-            <p className="hint-xs" style={{ marginBottom: '1.25rem' }}>
-              Duration: {formatTime(seconds)}
+        <div className="loader-container" style={{ maxWidth: '420px' }}>
+          <h2 style={{ marginBottom: '0.25rem' }}>{caseFile.title || 'Session Complete'}</h2>
+          {partnerString && (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+              with <strong>{partnerString}</strong>
             </p>
           )}
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1.25rem', fontSize: '0.95rem', fontWeight: 600 }}>Difficulty</p>
 
-          <div className="form-group" style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-            <label className="label-sm" style={{ fontWeight: 600, color: '#334155', marginBottom: '0.5rem', display: 'block' }}>
-              Delivery / Experience Rating (optional)
-            </label>
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-              {[1, 2, 3, 4, 5].map(s => (
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
+            {[1, 2, 3, 4, 5].map(s => {
+              const isFilled = s <= caserRating;
+              const color = caserRating > 0 ? getDifficultyColor(caserRating) : '#cbd5e1';
+              return (
                 <button
                   key={s}
                   type="button"
                   onClick={() => setCaserRating(caserRating === s ? 0 : s)}
                   className={`star-btn ${caserRating >= s ? getDifficultyClass(caserRating) : ''}`}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: isFilled ? color : '#cbd5e1' }}
                 >
-                  <Star size={26} fill={s <= caserRating ? 'currentColor' : 'none'} className={s <= caserRating ? 'star-active' : 'star-muted'} />
+                  <Star size={28} fill={isFilled ? color : 'none'} style={{ color: isFilled ? color : '#cbd5e1' }} />
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
-          <div className="form-group" style={{ textAlign: 'left', width: '100%', marginBottom: '1.25rem' }}>
-            <label className="label-sm" style={{ fontWeight: 600, color: '#334155' }}>
-              Session Notes & Reflection
-            </label>
-            <textarea
-              value={caserNotes}
-              onChange={e => setCaserNotes(e.target.value)}
-              placeholder="Things that went well, things that didn't go so well, notes for next time..."
-              rows={3}
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.75rem',
-                border: '1px solid var(--border)',
-                borderRadius: '0.5rem',
-                fontSize: '0.875rem',
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-                marginTop: '0.35rem',
-              }}
-            />
-          </div>
+          <textarea
+            value={caserNotes}
+            onChange={e => setCaserNotes(e.target.value)}
+            placeholder="Things that went well, things that didn't go so well, notes for next time..."
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              border: '1px solid var(--border)',
+              borderRadius: '0.5rem',
+              fontSize: '0.875rem',
+              boxSizing: 'border-box',
+              fontFamily: 'inherit',
+              resize: 'none',
+              marginBottom: '1.25rem',
+            }}
+          />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
             <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.875rem' }} onClick={() => handleSaveCaserSession(true)}>
-              <CheckCircle2 size={18} /> Save & Finish
+              <CheckCircle2 size={20} /> Save & Finish
             </button>
-            <button className="btn btn-ghost" style={{ justifyContent: 'center' }} onClick={() => handleSaveCaserSession(false)}>
-              Skip Notes
+            <button className="btn btn-ghost" style={{ justifyContent: 'center', marginTop: '0.25rem' }} onClick={() => handleSaveCaserSession(false)}>
+              Skip
             </button>
           </div>
         </div>
@@ -738,40 +740,39 @@ const CaseeSession: React.FC<{
           <p style={{ color: 'var(--text-muted)', marginBottom: '1.25rem', fontSize: '0.95rem', fontWeight: 600 }}>Difficulty</p>
 
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
-            {[1, 2, 3, 4, 5].map(s => (
-              <button
-                key={s}
-                onClick={() => setPostRating(postRating === s ? 0 : s)}
-                className={`star-btn ${postRating >= s ? getDifficultyClass(postRating) : ''}`}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
-              >
-                <Star size={28} fill={s <= postRating ? 'currentColor' : 'none'} className={s <= postRating ? 'star-active' : 'star-muted'} />
-              </button>
-            ))}
+            {[1, 2, 3, 4, 5].map(s => {
+              const isFilled = s <= postRating;
+              const color = postRating > 0 ? getDifficultyColor(postRating) : '#cbd5e1';
+              return (
+                <button
+                  key={s}
+                  onClick={() => setPostRating(postRating === s ? 0 : s)}
+                  className={`star-btn ${postRating >= s ? getDifficultyClass(postRating) : ''}`}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: isFilled ? color : '#cbd5e1' }}
+                >
+                  <Star size={28} fill={isFilled ? color : 'none'} style={{ color: isFilled ? color : '#cbd5e1' }} />
+                </button>
+              );
+            })}
           </div>
 
-          <div className="form-group" style={{ textAlign: 'left', width: '100%', marginBottom: '1.25rem' }}>
-            <label className="label-sm" style={{ fontWeight: 600, color: '#334155' }}>
-              Session Notes & Reflection
-            </label>
-            <textarea
-              value={postNotes}
-              onChange={e => setPostNotes(e.target.value)}
-              placeholder="Things that went well, things that didn't go so well, notes for next time..."
-              rows={3}
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.75rem',
-                border: '1px solid var(--border)',
-                borderRadius: '0.5rem',
-                fontSize: '0.875rem',
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-                marginTop: '0.35rem',
-              }}
-            />
-          </div>
+          <textarea
+            value={postNotes}
+            onChange={e => setPostNotes(e.target.value)}
+            placeholder="Things that went well, things that didn't go so well, notes for next time..."
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              border: '1px solid var(--border)',
+              borderRadius: '0.5rem',
+              fontSize: '0.875rem',
+              boxSizing: 'border-box',
+              fontFamily: 'inherit',
+              resize: 'none',
+              marginBottom: '1.25rem',
+            }}
+          />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
             <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.875rem' }} onClick={() => handleSaveAndExit('completed')}>
