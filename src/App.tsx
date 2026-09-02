@@ -338,16 +338,16 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
     const partnerString = getPartnerString();
     return (
       <div className="landing-container">
-        <div className="loader-container" style={{ maxWidth: '420px' }}>
-          <h2 style={{ marginBottom: '0.25rem' }}>{caseFile.title || 'Session Complete'}</h2>
+        <div className="loader-container" style={{ width: '100%', maxWidth: '520px' }}>
+          <h2 style={{ marginBottom: '0.35rem', fontSize: '1.65rem' }}>{caseFile.title || 'Session Complete'}</h2>
           {partnerString && (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
               with <strong>{partnerString}</strong>
             </p>
           )}
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1.25rem', fontSize: '0.95rem', fontWeight: 600 }}>Difficulty</p>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.95rem', fontWeight: 600 }}>Difficulty</p>
 
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
             {[1, 2, 3, 4, 5].map(s => {
               const isFilled = s <= caserRating;
               const color = caserRating > 0 ? getDifficultyColor(caserRating) : '#cbd5e1';
@@ -357,9 +357,9 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                   type="button"
                   onClick={() => setCaserRating(caserRating === s ? 0 : s)}
                   className={`star-btn ${caserRating >= s ? getDifficultyClass(caserRating) : ''}`}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: isFilled ? color : '#cbd5e1' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: isFilled ? color : '#cbd5e1' }}
                 >
-                  <Star size={28} fill={isFilled ? color : 'none'} style={{ color: isFilled ? color : '#cbd5e1' }} />
+                  <Star size={30} fill={isFilled ? color : 'none'} style={{ color: isFilled ? color : '#cbd5e1' }} />
                 </button>
               );
             })}
@@ -369,22 +369,23 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
             value={caserNotes}
             onChange={e => setCaserNotes(e.target.value)}
             placeholder="Things that went well, things that didn't go so well, notes for next time..."
-            rows={3}
+            rows={4}
             style={{
               width: '100%',
-              padding: '0.75rem',
+              padding: '0.85rem 1rem',
               border: '1px solid var(--border)',
-              borderRadius: '0.5rem',
-              fontSize: '0.875rem',
+              borderRadius: '0.625rem',
+              fontSize: '0.9rem',
+              lineHeight: 1.5,
               boxSizing: 'border-box',
               fontFamily: 'inherit',
-              resize: 'none',
-              marginBottom: '1.25rem',
+              resize: 'vertical',
+              marginBottom: '1.5rem',
             }}
           />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
-            <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.875rem' }} onClick={() => handleSaveCaserSession(true)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', width: '100%' }}>
+            <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.95rem 1.25rem', fontSize: '0.95rem' }} onClick={() => handleSaveCaserSession(true)}>
               <CheckCircle2 size={20} /> Save & Finish
             </button>
             <button className="btn btn-ghost" style={{ justifyContent: 'center', marginTop: '0.25rem' }} onClick={() => handleSaveCaserSession(false)}>
@@ -730,16 +731,16 @@ const CaseeSession: React.FC<{
   if (showPostSession) {
     return (
       <div className="landing-container">
-        <div className="loader-container" style={{ maxWidth: '420px' }}>
-          <h2 style={{ marginBottom: '0.25rem' }}>{sessionData?.metadata?.title || 'Session Complete'}</h2>
+        <div className="loader-container" style={{ width: '100%', maxWidth: '520px' }}>
+          <h2 style={{ marginBottom: '0.35rem', fontSize: '1.65rem' }}>{sessionData?.metadata?.title || 'Session Complete'}</h2>
           {sessionData?.caserName && (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
               with <strong>{sessionData.caserName}</strong>
             </p>
           )}
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1.25rem', fontSize: '0.95rem', fontWeight: 600 }}>Difficulty</p>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.95rem', fontWeight: 600 }}>Difficulty</p>
 
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
             {[1, 2, 3, 4, 5].map(s => {
               const isFilled = s <= postRating;
               const color = postRating > 0 ? getDifficultyColor(postRating) : '#cbd5e1';
@@ -748,9 +749,9 @@ const CaseeSession: React.FC<{
                   key={s}
                   onClick={() => setPostRating(postRating === s ? 0 : s)}
                   className={`star-btn ${postRating >= s ? getDifficultyClass(postRating) : ''}`}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: isFilled ? color : '#cbd5e1' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: isFilled ? color : '#cbd5e1' }}
                 >
-                  <Star size={28} fill={isFilled ? color : 'none'} style={{ color: isFilled ? color : '#cbd5e1' }} />
+                  <Star size={30} fill={isFilled ? color : 'none'} style={{ color: isFilled ? color : '#cbd5e1' }} />
                 </button>
               );
             })}
@@ -760,25 +761,26 @@ const CaseeSession: React.FC<{
             value={postNotes}
             onChange={e => setPostNotes(e.target.value)}
             placeholder="Things that went well, things that didn't go so well, notes for next time..."
-            rows={3}
+            rows={4}
             style={{
               width: '100%',
-              padding: '0.75rem',
+              padding: '0.85rem 1rem',
               border: '1px solid var(--border)',
-              borderRadius: '0.5rem',
-              fontSize: '0.875rem',
+              borderRadius: '0.625rem',
+              fontSize: '0.9rem',
+              lineHeight: 1.5,
               boxSizing: 'border-box',
               fontFamily: 'inherit',
-              resize: 'none',
-              marginBottom: '1.25rem',
+              resize: 'vertical',
+              marginBottom: '1.5rem',
             }}
           />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
-            <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.875rem' }} onClick={() => handleSaveAndExit('completed')}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', width: '100%' }}>
+            <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.95rem 1.25rem', fontSize: '0.95rem' }} onClick={() => handleSaveAndExit('completed')}>
               <CheckCircle2 size={20} /> Completed
             </button>
-            <button className="btn btn-secondary" style={{ justifyContent: 'center', padding: '0.875rem' }} onClick={() => handleSaveAndExit('observed')}>
+            <button className="btn btn-secondary" style={{ justifyContent: 'center', padding: '0.95rem 1.25rem', fontSize: '0.95rem' }} onClick={() => handleSaveAndExit('observed')}>
               <BookOpen size={20} /> Observed
             </button>
             <button className="btn btn-ghost" style={{ justifyContent: 'center', marginTop: '0.25rem' }} onClick={() => onBack()}>
