@@ -80,7 +80,7 @@ const LandingPage: React.FC<{
       </div>
       <div className="hero">
         <div className="brand-wrapper-hero">
-          <AppLogo size={100} className="hero-logo" />
+          <AppLogo size={64} className="hero-logo" />
           <h1>ProCase</h1>
         </div>
         <p>Professional toolkit for MBA casing preparation.</p>
