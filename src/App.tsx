@@ -190,9 +190,6 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
   const activePeersMapRef = useRef<Map<string, string>>(new Map());
   const [peerCaseeName, setPeerCaseeName] = useState<string | null>(null);
   const [connectedNames, setConnectedNames] = useState<string[]>([]);
-  const [showPostSession, setShowPostSession] = useState(false);
-  const [caserNotes, setCaserNotes] = useState('');
-  const [caserRating, setCaserRating] = useState(0);
 
   useEffect(() => {
     const load = async () => { const doc = await pdfService.loadDocument(caseFile.pdfBlob, caseFile.id); setTotalPages(doc.numPages); };
@@ -303,99 +300,33 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
       : (connectedNames.length > 0 ? connectedNames.join(', ') : (peerCaseeName || undefined));
   };
 
-  const handleExitClick = () => {
+  const handleExitClick = async () => {
     if (timerActive) setTimerActive(false);
 
+    // If we had a peer, automatically save the session before exiting
     if (hadPeerRef.current) {
       peerService.send('SESSION_END', {});
-      setShowPostSession(true);
+      const partnerString = getPartnerString();
+
+      await libraryService.addHistoryEntry({
+        role: 'caser',
+        date: Date.now(),
+        caseId: caseFile.id,
+        caseTitle: caseFile.title,
+        casebook: caseFile.source || undefined,
+        partnerName: partnerString,
+        durationSeconds: seconds,
+        outcome: 'given',
+      });
+      const updated = await libraryService.getCaseById(caseFile.id);
+      peerService.destroy();
+      onBack(updated as CasePackage | undefined);
     } else {
+      // No peer, just exit
       peerService.destroy();
       onBack();
     }
   };
-
-  const handleSaveCaserSession = async (saveNotes: boolean) => {
-    const partnerString = getPartnerString();
-    await libraryService.addHistoryEntry({
-      role: 'caser',
-      date: Date.now(),
-      caseId: caseFile.id,
-      caseTitle: caseFile.title,
-      casebook: caseFile.source || undefined,
-      partnerName: partnerString,
-      durationSeconds: seconds,
-      selfRating: (saveNotes && caserRating > 0) ? caserRating : undefined,
-      notes: (saveNotes && caserNotes.trim()) ? caserNotes.trim() : undefined,
-      outcome: 'given',
-    });
-    const updated = await libraryService.getCaseById(caseFile.id);
-    peerService.destroy();
-    onBack(updated as CasePackage | undefined);
-  };
-
-  if (showPostSession) {
-    const partnerString = getPartnerString();
-    return (
-      <div className="landing-container">
-        <div className="loader-container" style={{ width: '100%', maxWidth: '520px' }}>
-          <h2 style={{ marginBottom: '0.35rem', fontSize: '1.65rem' }}>{caseFile.title || 'Session Complete'}</h2>
-          {partnerString && (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
-              with <strong>{partnerString}</strong>
-            </p>
-          )}
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.95rem', fontWeight: 600 }}>Difficulty</p>
-
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginBottom: '1.5rem' }}>
-            {[1, 2, 3, 4, 5].map(s => {
-              const isFilled = s <= caserRating;
-              const color = caserRating > 0 ? getDifficultyColor(caserRating) : '#cbd5e1';
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setCaserRating(caserRating === s ? 0 : s)}
-                  className={`star-btn ${caserRating >= s ? getDifficultyClass(caserRating) : ''}`}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: isFilled ? color : '#cbd5e1' }}
-                >
-                  <Star size={30} fill={isFilled ? color : 'none'} style={{ color: isFilled ? color : '#cbd5e1' }} />
-                </button>
-              );
-            })}
-          </div>
-
-          <textarea
-            value={caserNotes}
-            onChange={e => setCaserNotes(e.target.value)}
-            placeholder="Things that went well, things that didn't go so well, notes for next time..."
-            rows={4}
-            style={{
-              width: '100%',
-              padding: '0.85rem 1rem',
-              border: '1px solid var(--border)',
-              borderRadius: '0.625rem',
-              fontSize: '0.9rem',
-              lineHeight: 1.5,
-              boxSizing: 'border-box',
-              fontFamily: 'inherit',
-              resize: 'vertical',
-              marginBottom: '1.5rem',
-            }}
-          />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', width: '100%' }}>
-            <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.95rem 1.25rem', fontSize: '0.95rem' }} onClick={() => handleSaveCaserSession(true)}>
-              <CheckCircle2 size={20} /> Save & Finish
-            </button>
-            <button className="btn btn-ghost" style={{ justifyContent: 'center', marginTop: '0.25rem' }} onClick={() => handleSaveCaserSession(false)}>
-              Skip
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="session-layout">
