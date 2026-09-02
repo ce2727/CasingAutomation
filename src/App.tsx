@@ -1379,16 +1379,8 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
                             ) : <span className="text-muted">—</span>}
                           </div>
                         </div>
-                        <div className="history-row-right" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div className="history-row-right">
                           <span className="history-date-text">{new Date(entry.date).toLocaleDateString()}</span>
-                          <button 
-                            className="btn btn-ghost btn-xs" 
-                            style={{ padding: '0.2rem 0.5rem', color: 'var(--primary)', fontWeight: 600 }}
-                            onClick={() => handleOpenNoteEdit(entry)}
-                            title={entry.notes ? 'Edit notes' : 'Add notes'}
-                          >
-                            {entry.notes ? 'Edit' : '+ Note'}
-                          </button>
                         </div>
                       </div>
 
