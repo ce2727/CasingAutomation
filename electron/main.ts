@@ -58,35 +58,58 @@ async function checkForUpdates() {
 
 function createWindow() {
   const isDev = !!process.env.VITE_DEV_SERVER_URL;
-  const iconPath = isDev 
-    ? path.join(process.cwd(), 'public/desktop-icon.png')
-    : path.join(process.cwd(), 'dist/desktop-icon.png');
 
   if (process.platform === 'darwin' && app.dock) {
-    app.dock.setIcon(iconPath);
+    try {
+      const iconPath = isDev 
+        ? path.join(process.cwd(), 'public/desktop-icon.png')
+        : path.join(__dirname, '../dist/desktop-icon.png');
+      app.dock.setIcon(iconPath);
+    } catch {
+      // In production, dock icon is already bundled by macOS
+    }
   }
 
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     title: "ProCase",
-    icon: iconPath,
+    show: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
   });
 
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    const indexPath = path.join(__dirname, '../dist/index.html');
+    mainWindow.loadFile(indexPath).catch(err => {
+      console.error('Failed to load index.html:', err);
+      dialog.showErrorBox('Launch Error', `Could not load app interface: ${err.message}`);
+    });
   }
 }
 
 app.whenReady().then(() => {
   createWindow();
   setTimeout(checkForUpdates, 3000);
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
 });
 
 app.on('window-all-closed', () => {

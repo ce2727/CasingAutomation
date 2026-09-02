@@ -33,20 +33,36 @@ async function l() {
 	}
 }
 function u() {
-	let n = process.env.VITE_DEV_SERVER_URL ? i.join(process.cwd(), "public/desktop-icon.png") : i.join(process.cwd(), "dist/desktop-icon.png");
-	process.platform === "darwin" && t.dock && t.dock.setIcon(n), s = new e({
+	let r = !!process.env.VITE_DEV_SERVER_URL;
+	if (process.platform === "darwin" && t.dock) try {
+		let e = r ? i.join(process.cwd(), "public/desktop-icon.png") : i.join(o, "../dist/desktop-icon.png");
+		t.dock.setIcon(e);
+	} catch {}
+	if (s = new e({
 		width: 1200,
 		height: 800,
 		title: "ProCase",
-		icon: n,
+		show: !0,
 		webPreferences: {
 			nodeIntegration: !0,
 			contextIsolation: !1
 		}
-	}), process.env.VITE_DEV_SERVER_URL ? s.loadURL(process.env.VITE_DEV_SERVER_URL) : s.loadFile(i.join(o, "../dist/index.html"));
+	}), s.once("ready-to-show", () => {
+		s?.show(), s?.focus();
+	}), s.on("closed", () => {
+		s = null;
+	}), process.env.VITE_DEV_SERVER_URL) s.loadURL(process.env.VITE_DEV_SERVER_URL);
+	else {
+		let e = i.join(o, "../dist/index.html");
+		s.loadFile(e).catch((e) => {
+			console.error("Failed to load index.html:", e), n.showErrorBox("Launch Error", `Could not load app interface: ${e.message}`);
+		});
+	}
 }
 t.whenReady().then(() => {
 	u(), setTimeout(l, 3e3);
+}), t.on("activate", () => {
+	e.getAllWindows().length === 0 && u();
 }), t.on("window-all-closed", () => {
 	process.platform !== "darwin" && t.quit();
 });
