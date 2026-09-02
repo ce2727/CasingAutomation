@@ -136,24 +136,52 @@ jobs:
             | **Mac (Apple Silicon)** | [Download for Mac (Apple Silicon)](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}-arm64.dmg) | *Recommended for M1, M2, M3, M4 Macs (2020+)* |
             | **Mac (Intel)** | [Download for Mac (Intel)](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}.dmg) | *For older Macs (2019 or earlier)* |
             | **Windows PC** | [Download for Windows (.exe)](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase%20Setup%20${{ github.event.inputs.version }}.exe) | *Setup installer for Windows 10 & 11* |
-            | **Web Browser** | [Launch Web Version](https://casingautomation.vercel.app) | *Runs instantly in your browser (no install needed)* |
+            | **Web Version** *(Casee Only)* | [Launch Web Version](https://casingautomation.vercel.app) | *Join a partner's session only (cannot give cases)* |
 
             ---
 
-            ### Quick Start Instructions
+            ### Important Note on the Web Version: Casee Only (Joining Sessions)
 
-            #### For Mac Users:
-            1. Click **Download for Mac (Apple Silicon)** above.
-            2. Open the downloaded `.dmg` and drag **ProCase** into your **Applications** folder.
-            3. *First time opening:* If macOS blocks it with an unverified developer message:
-               - Open **System Settings** ( Apple menu) → **Privacy & Security**.
-               - Scroll down and click **Open Anyway**. (You only need to do this once!).
+            The **Web Version** at [casingautomation.vercel.app](https://casingautomation.vercel.app) is **not** the full application:
+            - **What it does:** Allows you to quickly join someone else's case session as a **Casee / Interviewee** in your browser without installing software.
+            - **What it cannot do:** You cannot give cases, access or manage a case library, build cases, or track casing history.
+            - **To give cases or manage your own library:** You **must** download and install the desktop app for **Mac** or **Windows** above.
 
-            #### For Windows Users:
-            1. Click **Download for Windows (.exe)** above.
-            2. Open the downloaded file to install and start ProCase.
-            3. *First time opening:* If Windows SmartScreen displays *"Windows protected your PC"*:
-               - Click **More info** → **Run anyway**.
+            ---
+
+            ### Installation & Security Instructions for Mac
+
+            Because ProCase is a free, student-developed open-source application and not distributed through the Apple Mac App Store, macOS Gatekeeper will show a security message on the first launch stating that *Apple could not verify ProCase* or that it is from an *unidentified developer*. This is standard Apple security behavior for non-App Store software.
+
+            #### Step-by-Step Mac Setup:
+            1. Download the **Mac (Apple Silicon)** installer above (or **Mac (Intel)** if your Mac was made in 2019 or earlier).
+            2. Double-click the downloaded `.dmg` file and drag the **ProCase** icon into your **Applications** folder.
+            3. Open your **Applications** folder and double-click **ProCase**.
+            4. If macOS blocks it with the alert *"Apple could not verify 'ProCase' is free of malware"*:
+               - Click **Done** on the popup (do not move to trash).
+               - Open **System Settings** ( Apple menu at top left) → **Privacy & Security**.
+               - Scroll down toward the bottom of the page until you see:  
+                 *"ProCase" was blocked from use because it is not from an identified developer.*
+               - Click **Open Anyway**.
+               - When prompted, enter your Mac password or Touch ID, then click **Open** on the confirmation prompt.
+
+            *(Alternative shortcut: In your Applications folder, hold the **Control** key and click **ProCase**, then select **Open** from the menu and click **Open**).*
+
+            > **Note:** You only have to do this once! Afterwards, ProCase will open normally with a standard double-click.
+
+            ---
+
+            ### Installation & Security Instructions for Windows
+
+            Because ProCase is a free open-source application and does not use an expensive corporate code-signing certificate, Windows Defender SmartScreen may display an alert on first launch stating *"Windows protected your PC"*.
+
+            #### Step-by-Step Windows Setup:
+            1. Download the **Windows (.exe)** installer above.
+            2. Double-click the downloaded `ProCase Setup.exe` file.
+            3. If a blue **Windows protected your PC** (SmartScreen) popup appears:
+               - Click the small blue text link that says **More info**.
+               - A new button will appear: click **Run anyway**.
+            4. ProCase will finish installing and automatically launch!
 
             ---
             *All individual build files and portable .zip archives are listed below under **Assets**.*
