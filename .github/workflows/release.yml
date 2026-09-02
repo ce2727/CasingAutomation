@@ -127,14 +127,36 @@ jobs:
           tag_name: v${{ github.event.inputs.version }}
           name: ProCase v${{ github.event.inputs.version }}
           body: |
-            ### ProCase v${{ github.event.inputs.version }}
+            ## 📥 Quick Downloads for ProCase v${{ github.event.inputs.version }}
 
-            #### Desktop Downloads:
-            - **macOS**: Download `.dmg` (drag and drop to Applications) or `.zip`
-            - **Windows**: Download `.exe` (installer) or `.zip` (portable)
+            Choose your operating system below to download the app:
 
-            #### Web Version:
-            - Live at [casingautomation.vercel.app](https://casingautomation.vercel.app)
+            | Platform | Download Link | Notes |
+            | :--- | :--- | :--- |
+            | 🍏 **Mac (Apple Silicon)** | [⬇️ **Download for Mac (Apple Silicon)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}-arm64.dmg) | *Recommended for M1, M2, M3, M4 Macs (2020+)* |
+            | 🍏 **Mac (Intel)** | [⬇️ **Download for Mac (Intel)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}.dmg) | *For older Macs (2019 or earlier)* |
+            | 🪟 **Windows PC** | [⬇️ **Download for Windows (.exe)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase%20Setup%20${{ github.event.inputs.version }}.exe) | *Setup installer for Windows 10 & 11* |
+            | 🌐 **Web Browser** | [🔗 **Launch Web Version**](https://casingautomation.vercel.app) | *Runs instantly in your browser (no install needed)* |
+
+            ---
+
+            ### 🚀 Quick Start Instructions
+
+            #### 🍏 For Mac Users:
+            1. Click **Download for Mac (Apple Silicon)** above.
+            2. Open the downloaded `.dmg` and drag **ProCase** into your **Applications** folder.
+            3. *First time opening:* If macOS blocks it with an unverified developer message:
+               - Open **System Settings** ( Apple menu) → **Privacy & Security**.
+               - Scroll down and click **Open Anyway**. (You only need to do this once!).
+
+            #### 🪟 For Windows Users:
+            1. Click **Download for Windows (.exe)** above.
+            2. Open the downloaded file to install and start ProCase.
+            3. *First time opening:* If Windows SmartScreen displays *"Windows protected your PC"*:
+               - Click **More info** → **Run anyway**.
+
+            ---
+            *All individual build files and portable .zip archives are listed below under **Assets**.*
           files: |
             release-artifacts/*.dmg
             release-artifacts/*.exe
