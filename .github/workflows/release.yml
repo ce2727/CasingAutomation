@@ -127,16 +127,16 @@ jobs:
           tag_name: v${{ github.event.inputs.version }}
           name: ProCase v${{ github.event.inputs.version }}
           body: |
-            ## ProCase v${{ github.event.inputs.version }}
+            ## 🚀 ProCase v${{ github.event.inputs.version }}
 
             ---
 
-            ### Mac Downloads & Setup
+            ### 🍏 Mac Downloads & Setup
 
             #### 1. Download for your Mac:
-            - [**Download for Mac (Apple Silicon)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}-arm64.dmg)  
+            - [🍏 **Download for Mac (Apple Silicon)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}-arm64.dmg)  
               *Recommended for M1, M2, M3, M4 Macs (2020 or newer)*
-            - [**Download for Mac (Intel)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}.dmg)  
+            - [🍏 **Download for Mac (Intel)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}.dmg)  
               *For older Macs (2019 or earlier)*
 
             #### 2. Install & Security Instructions:
@@ -154,14 +154,14 @@ jobs:
 
             *(Alternative shortcut: In your Applications folder, hold the **Control** key and click **ProCase**, then select **Open** from the menu and click **Open**).*
 
-            > **Note:** You only have to do this once! Afterwards, ProCase will open normally with a standard double-click.
+            > 💡 **Note:** You only have to do this once! Afterwards, ProCase will open normally with a standard double-click.
 
             ---
 
-            ### Windows Download & Setup
+            ### 🪟 Windows Download & Setup
 
             #### 1. Download for Windows:
-            - [**Download ProCase for Windows (.exe)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase%20Setup%20${{ github.event.inputs.version }}.exe)  
+            - [🪟 **Download ProCase for Windows (.exe)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase%20Setup%20${{ github.event.inputs.version }}.exe)  
               *Setup installer for Windows 10 & 11*
 
             #### 2. Install & Security Instructions:
@@ -175,11 +175,11 @@ jobs:
 
             ---
 
-            ### Web Version (Casee Only)
+            ### 🌐 Web Version (Casee Only)
 
-            - [**Launch Web Version**](https://casingautomation.vercel.app)
+            - [🌐 **Launch Web Version**](https://casingautomation.vercel.app)
 
-            **Important Note on the Web Version:**  
+            **⚠️ Important Note on the Web Version:**  
             The browser version is **not** the full application:
             - **What it does:** Allows you to quickly join someone else's case session as a **Casee / Interviewee** in your browser without installing software.
             - **What it cannot do:** You cannot give cases, access or manage a case library, build cases, or track casing history.
