@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { libraryService, type CasePackage, type HistoryEntry, type HistoryOutcome } from './services/LibraryService';
+import { libraryService, type CasePackage, type HistoryEntry, type HistoryOutcome, type ImportResult } from './services/LibraryService';
 import { peerService } from './services/PeerService';
 import { pdfService } from './services/PdfService';
 import { CaseSlicer } from './components/CaseSlicer';
 import { PDFViewer } from './components/PDFViewer';
 import { AppLogo } from './components/AppLogo';
-import { Play, BookOpen, Share2, Check, Laptop, Users, Loader2, Info, ArrowLeft, RotateCcw, Trash2, Scissors, Download, Pause, ChevronLeft, ChevronRight, Plus, Search, Star, Wrench, Copy, MoreVertical, CheckCircle2, Upload, Clock, FileText, X, History, User, Settings } from 'lucide-react';
+import { Play, BookOpen, Share2, Check, Laptop, Users, Loader2, Info, ArrowLeft, RotateCcw, Trash2, Scissors, Download, Pause, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Star, Wrench, Copy, MoreVertical, CheckCircle2, Upload, Clock, X, History, User, Settings, ArrowRight, FileSpreadsheet } from 'lucide-react';
 import './App.css';
 
 // --- Environment Detection ---
@@ -73,8 +73,8 @@ const LandingPage: React.FC<{
   return (
     <div className="landing-container">
       <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', display: 'flex', gap: '0.75rem' }}>
-        <button className="btn btn-ghost btn-sm" onClick={onSettingsClick} title={`Settings (User: ${userName || 'Not Set'})`} style={{ padding: '0.5rem' }}>
-          <Settings size={20} />
+        <button className="btn btn-ghost btn-sm" onClick={onSettingsClick} title={`Account Settings (User: ${userName || 'Not Set'})`} style={{ padding: '0.5rem' }}>
+          <User size={20} />
         </button>
       </div>
       <div className="hero">
@@ -153,8 +153,10 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
   const sessionInitializedRef = useRef(false);
   const hadPeerRef = useRef(false);
   const caseeNameFromPeerRef = useRef<string>('');
-  const [postCaseeName, setPostCaseeName] = useState('');
+  const allSessionUsersRef = useRef<Set<string>>(new Set());
+  const activePeersMapRef = useRef<Map<string, string>>(new Map());
   const [peerCaseeName, setPeerCaseeName] = useState<string | null>(null);
+  const [connectedNames, setConnectedNames] = useState<string[]>([]);
 
   useEffect(() => {
     const load = async () => { const doc = await pdfService.loadDocument(caseFile.pdfBlob, caseFile.id); setTotalPages(doc.numPages); };
@@ -167,15 +169,40 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
     peerService.init(generatedId);
     peerService.onOpen(setPeerId);
     peerService.host();
-    peerService.onConnectionCountChange(count => {
+    peerService.onConnectionCountChange((count, activePeerIds) => {
       setConnectionCount(count);
-      if (count > 0) hadPeerRef.current = true;
+      if (count > 0) {
+        hadPeerRef.current = true;
+      }
+      if (activePeerIds) {
+        const currentPeerIdSet = new Set(activePeerIds);
+        for (const peerId of activePeersMapRef.current.keys()) {
+          if (!currentPeerIdSet.has(peerId)) {
+            activePeersMapRef.current.delete(peerId);
+          }
+        }
+        const activeNames = Array.from(new Set(Array.from(activePeersMapRef.current.values())));
+        setConnectedNames(activeNames);
+      } else if (count === 0) {
+        activePeersMapRef.current.clear();
+        setConnectedNames([]);
+      }
     });
     peerService.onMessage(msg => {
       if (msg.type === 'PEER_INFO' && msg.payload?.name) {
-        caseeNameFromPeerRef.current = msg.payload.name;
-        setPostCaseeName(msg.payload.name);
-        setPeerCaseeName(msg.payload.name);
+        const name = String(msg.payload.name).trim();
+        if (name) {
+          caseeNameFromPeerRef.current = name;
+          setPeerCaseeName(name);
+          allSessionUsersRef.current.add(name);
+          if (msg.senderPeerId) {
+            activePeersMapRef.current.set(msg.senderPeerId, name);
+          }
+          const activeNames = activePeersMapRef.current.size > 0
+            ? Array.from(new Set(Array.from(activePeersMapRef.current.values())))
+            : Array.from(allSessionUsersRef.current);
+          setConnectedNames(activeNames);
+        }
       }
     });
     sessionInitializedRef.current = false;
@@ -239,13 +266,18 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
     // If we had a peer, automatically save the session before exiting
     if (hadPeerRef.current) {
       peerService.send('SESSION_END', {});
+      const allUniqueUsers = Array.from(allSessionUsersRef.current);
+      const partnerString = allUniqueUsers.length > 0
+        ? allUniqueUsers.join(', ')
+        : (connectedNames.length > 0 ? connectedNames.join(', ') : (peerCaseeName || undefined));
+
       await libraryService.addHistoryEntry({
         role: 'caser',
         date: Date.now(),
         caseId: caseFile.id,
         caseTitle: caseFile.title,
         casebook: caseFile.source || undefined,
-        partnerName: postCaseeName.trim() || peerCaseeName || undefined,
+        partnerName: partnerString,
         durationSeconds: seconds,
         outcome: 'given',
       });
@@ -311,6 +343,26 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                 {copied ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </div>
+            <div className={`connection-peers-box ${connectionCount > 0 ? 'active' : 'waiting'}`}>
+              <span
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: connectionCount > 0 ? '#22c55e' : '#cbd5e1',
+                  display: 'inline-block',
+                  flexShrink: 0
+                }}
+              />
+              <span style={{ fontWeight: 600, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                {connectionCount > 0 ? 'Connected:' : 'Waiting:'}
+              </span>
+              <span style={{ fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {connectionCount > 0
+                  ? (connectedNames.length > 0 ? connectedNames.join(', ') : (peerCaseeName || 'Partner'))
+                  : 'No partner yet'}
+              </span>
+            </div>
           </div>
           <div className="exhibit-controls">
             <div className="section-header-compact">
@@ -350,7 +402,12 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
 };
 
 // --- Casee Session ---
-const CaseeSession: React.FC<{ initialJoinId: string, userName: string, onBack: () => void }> = ({ initialJoinId, userName, onBack }) => {
+const CaseeSession: React.FC<{
+  initialJoinId: string;
+  userName: string;
+  onBack: () => void;
+  onNameUpdate?: (name: string) => void;
+}> = ({ initialJoinId, userName: initialUserName, onBack, onNameUpdate }) => {
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [sessionData, setSessionData] = useState<{ metadata: any, pdfBuffer: ArrayBuffer, caserName?: string } | null>(null);
@@ -360,11 +417,30 @@ const CaseeSession: React.FC<{ initialJoinId: string, userName: string, onBack: 
   const [showTimer, setShowTimer] = useState(false);
   const [showPostSession, setShowPostSession] = useState(false);
   const [postRating, setPostRating] = useState(0);
+
+  // Casee name management
+  const [caseeName, setCaseeName] = useState(() => initialUserName || getUserName() || '');
+  const [showNamePrompt, setShowNamePrompt] = useState(() => !initialUserName && !getUserName());
+  const [nameInput, setNameInput] = useState('');
+  const caseeNameRef = useRef(caseeName);
+  caseeNameRef.current = caseeName;
+
   const hadSessionRef = useRef(false);
   const hasExitedRef = useRef(false);
   const joinIdRef = useRef(initialJoinId);
   const wakeLockRef = useRef<any>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleSaveCaseeName = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setUserName(trimmed);
+    setCaseeName(trimmed);
+    caseeNameRef.current = trimmed;
+    if (onNameUpdate) onNameUpdate(trimmed);
+    setShowNamePrompt(false);
+    peerService.send('PEER_INFO', { name: trimmed });
+  };
 
   // Auto-scroll to latest exhibit
   useEffect(() => {
@@ -418,8 +494,8 @@ const CaseeSession: React.FC<{ initialJoinId: string, userName: string, onBack: 
       if (count > 0) {
         setStatus('connected');
         clearTimeout(timeout);
-        if (userName) {
-          peerService.send('PEER_INFO', { name: userName });
+        if (caseeNameRef.current) {
+          peerService.send('PEER_INFO', { name: caseeNameRef.current });
         }
       } else {
         setStatus('idle');
@@ -433,6 +509,9 @@ const CaseeSession: React.FC<{ initialJoinId: string, userName: string, onBack: 
         hadSessionRef.current = true;
         setRevealedPages(msg.payload.revealedExhibits || []);
         setSessionData({ metadata: msg.payload.metadata, pdfBuffer: msg.payload.pdfBuffer, caserName: msg.payload.caserName });
+        if (caseeNameRef.current) {
+          peerService.send('PEER_INFO', { name: caseeNameRef.current });
+        }
       } else if (msg.type === 'REVEAL_PAGE') {
         const { pageNumber, title, isRevealed } = msg.payload;
         if (isRevealed) setLastRevealedPage(pageNumber);
@@ -499,6 +578,47 @@ const CaseeSession: React.FC<{ initialJoinId: string, userName: string, onBack: 
     }
     onBack();
   };
+
+  if (showNamePrompt) {
+    return (
+      <div className="landing-container">
+        <div className="loader-container" style={{ maxWidth: '400px', textAlign: 'center' }}>
+          <div className="icon-wrapper bg-green" style={{ margin: '0 auto 1rem' }}>
+            <User size={32} />
+          </div>
+          <h2 style={{ marginBottom: '0.25rem' }}>Join Casing Session</h2>
+          <p className="hint-xs" style={{ marginBottom: '1.5rem' }}>
+            Enter your name so your partner knows who they're casing with.
+          </p>
+          <div className="form-group" style={{ textAlign: 'left', marginBottom: '1.25rem', width: '100%' }}>
+            <label className="label-sm">Your Name</label>
+            <input
+              type="text"
+              placeholder="e.g. Alex Johnson"
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && nameInput.trim() && handleSaveCaseeName(nameInput)}
+              autoFocus
+              style={{ padding: '0.65rem 0.75rem', border: '1px solid var(--border)', borderRadius: '0.5rem', fontSize: '0.95rem', width: '100%', boxSizing: 'border-box', marginTop: '0.35rem' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+            <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={handleForceExit}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              style={{ flex: 2, justifyContent: 'center' }}
+              onClick={() => handleSaveCaseeName(nameInput)}
+              disabled={!nameInput.trim()}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (showPostSession) {
     return (
@@ -955,26 +1075,627 @@ const HistoryPage: React.FC<{ onBack: () => void, cases: CasePackage[], onHistor
   );
 };
 
+// --- Build Case Hub ---
+const BuildCaseHub: React.FC<{
+  onBack: () => void;
+  onOpenTool: (file: File) => void;
+  onOpenBulkCsv: () => void;
+  onImportJson: (file: File) => void;
+  onExportJson: () => void;
+  onResetLibrary?: () => void;
+}> = ({ onBack, onOpenTool, onOpenBulkCsv, onImportJson, onExportJson, onResetLibrary }) => {
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const jsonInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onOpenTool(file);
+      e.target.value = '';
+    }
+  };
+
+  const handleJsonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onImportJson(file);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <div className="session-layout">
+      <input
+        type="file"
+        accept=".pdf"
+        ref={pdfInputRef}
+        style={{ display: 'none' }}
+        onChange={handlePdfChange}
+      />
+      <input
+        type="file"
+        accept=".json"
+        ref={jsonInputRef}
+        style={{ display: 'none' }}
+        onChange={handleJsonChange}
+      />
+
+      <header className="session-top-bar">
+        <div className="left-section" style={{ gap: '12px' }}>
+          <div className="header-brand-group" onClick={onBack}>
+            <AppLogo size={32} className="header-logo" />
+            <h2 className="brand-name">ProCase</h2>
+          </div>
+          <div className="header-divider" />
+          <button className="btn btn-ghost btn-sm" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ArrowLeft size={18} /> Library
+          </button>
+        </div>
+        <div className="center-section">
+          <h2 className="case-name">Settings</h2>
+        </div>
+        <div className="right-section">
+          <div className="breadcrumb-nav">
+            <span className="breadcrumb-muted">Library</span>
+            <span>/</span>
+            <span className="breadcrumb-active">Settings</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="build-hub-container">
+        <div className="build-hub-header">
+          <h1 className="build-hub-title">Add & Build Cases</h1>
+          <p className="build-hub-subtitle">
+            Choose a method below to create or import cases in your local ProCase library.
+          </p>
+        </div>
+
+        <div className="build-hub-sections">
+          {/* Section 1: Import */}
+          <div className="build-hub-section-single">
+            <h2 className="build-hub-section-title">Import</h2>
+            <div className="build-hub-card">
+              <div className="build-hub-card-title-row">
+                <div className="build-hub-icon-inline purple">
+                  <Upload size={22} />
+                </div>
+                <h3>Case Set</h3>
+              </div>
+              <p className="build-hub-card-desc">
+                Import a pre-built case package from your club. Duplicate cases in your library will be replaced.
+              </p>
+              <div className="build-hub-card-action">
+                <button
+                  className="btn btn-purple btn-block"
+                  onClick={() => jsonInputRef.current?.click()}
+                  style={{ padding: '0.75rem 1rem', justifyContent: 'center' }}
+                >
+                  <Upload size={18} /> Select .json File
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Vertical Divider */}
+          <div className="build-hub-vertical-divider" />
+
+          {/* Section 2: Build from PDF */}
+          <div className="build-hub-section-duo">
+            <h2 className="build-hub-section-title">Build from PDF</h2>
+            <div className="build-hub-section-duo-grid">
+              {/* Individual */}
+              <div className="build-hub-card">
+                <div className="build-hub-card-title-row">
+                  <div className="build-hub-icon-inline blue">
+                    <Scissors size={22} />
+                  </div>
+                  <h3>Individual</h3>
+                </div>
+                <p className="build-hub-card-desc">
+                  Upload any case or casebook PDF. Interactively preview pages, select start and end page boundaries, configure details (type, difficulty, tags), and designate exhibits.
+                </p>
+                <div className="build-hub-card-action">
+                  <button
+                    className="btn btn-primary btn-block"
+                    onClick={() => pdfInputRef.current?.click()}
+                    style={{ padding: '0.75rem 1rem', justifyContent: 'center' }}
+                  >
+                    Open Tool <ArrowRight size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Multiple */}
+              <div className="build-hub-card">
+                <div className="build-hub-card-title-row">
+                  <div className="build-hub-icon-inline green">
+                    <FileSpreadsheet size={22} />
+                  </div>
+                  <h3>Multiple</h3>
+                </div>
+                <p className="build-hub-card-desc">
+                  Guided process for importing an entire casebook at once. Provide a master casebook PDF alongside AI-generated data.
+                </p>
+                <div className="build-hub-card-action">
+                  <button
+                    className="btn btn-secondary btn-block"
+                    onClick={onOpenBulkCsv}
+                    style={{ padding: '0.75rem 1rem', justifyContent: 'center' }}
+                  >
+                    Open Tool <ArrowRight size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Export Section */}
+        <div className="build-hub-export-section">
+          <h2 className="build-hub-section-title">Export</h2>
+          <div className="build-hub-horizontal-divider" />
+
+          <div className="build-hub-export-grid">
+            {/* Card 1: Case Set */}
+            <div className="build-hub-card">
+              <div className="build-hub-card-title-row">
+                <div className="build-hub-icon-inline blue">
+                  <Download size={22} />
+                </div>
+                <h3>Case Set</h3>
+              </div>
+              <p className="build-hub-card-desc">
+                Looking to export your entire library as a case set?
+              </p>
+              <div className="build-hub-card-action">
+                <button
+                  className="btn btn-primary btn-block"
+                  onClick={onExportJson}
+                  style={{ padding: '0.75rem 1rem', justifyContent: 'center' }}
+                >
+                  <Download size={18} /> Export Library
+                </button>
+              </div>
+            </div>
+
+            {/* Card 2: Individual Case Export (No Button) */}
+            <div className="build-hub-card">
+              <div className="build-hub-card-title-row">
+                <div className="build-hub-icon-inline blue">
+                  <Share2 size={22} />
+                </div>
+                <h3>Individual</h3>
+              </div>
+              <p className="build-hub-card-desc">
+                To export an individual case as a standalone package, return to the Library screen, click the options menu (⋮) on any case card, and select <strong>Export Case</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Reset Library Option */}
+        {onResetLibrary && (
+          <div className="build-hub-reset-section">
+            <div className="build-hub-reset-text">
+              <h4>Reset Library</h4>
+              <p>Permanently delete all cases and session history from your local library.</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-reset-library"
+              onClick={onResetLibrary}
+            >
+              <RotateCcw size={16} /> Reset Library
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// --- Bulk CSV Importer ---
+const LLM_METADATA_PROMPT = `Task: Act as a Consulting Case Metadata Specialist. Analyze the provided PDF Casebook content and generate a raw CSV string for bulk import into the ProCase app.
+
+Output Requirement: Output ONLY the raw CSV text. No conversational filler, no markdown blocks, no bolding.
+
+CSV Headers:
+Title, Type, Difficulty, StartPage, EndPage, Tags, PageMetadata
+
+Data Standards:
+1. Title: Full case name. IMPORTANT: Wrap in double quotes (e.g., "Case Name").
+2. Type: Exactly one of: M&A, Profitability, Market Entry, Opportunity Assessment, Industry Analysis, Growth Strategy, Pricing, or Other.
+3. Difficulty: Integer 1-5. CRITICAL: Do not cluster all cases at 2-3. Distribute them logically based on the specific casebook's range (e.g., use 1 for the absolute easiest intro cases and 5 for the most complex final-round cases in this book).
+4. Page Ranges: The inclusive PDF page numbers.
+5. Tags: Semi-colon (;) separated list. Mandatory Tags to include:
+   - School: Include "[School Name]" (e.g., "NYU Stern", "Darden", "Kellogg").
+   - Market Sizing: Add "Market Sizing" if the case contains a sizing exercise.
+   - Industry/Firm: (e.g., "Pharma", "BCG", "Math-Heavy").
+   - Note: Do not include "Easy/Medium/Hard" as a tag; the Difficulty score handles this.
+6. PageMetadata: Title|IsExhibit;Title|IsExhibit;... (Use 1 for partner-visible exhibits, 0 for interviewer guides/prompts).
+   - Standard Names: Use terms like "Prompt", "Clarifying Info", "Exhibit 1: Revenue Chart", "Scoring Guide".
+
+Example Row: “Logistics optimization", Profitability, 4, 12, 14, "Shipping; BCG", "Prompt|0;Exhibit 1: Map|1;Scoring Guide|0”
+
+Format Rule: Wrap any field containing a comma in double quotes.`;
+
+const SAMPLE_CSV = `Title, Type, Difficulty, StartPage, EndPage, Tags, PageMetadata
+"Logistics Optimization", Profitability, 4, 12, 14, "Shipping; BCG; Darden", "Prompt|0;Exhibit 1: Map|1;Scoring Guide|0"
+"Solar Strategy", Profitability, 4, 1, 10, "Energy; Sustainability; NYU Stern", "Prompt|0;Exhibit A|1;Exhibit B|1"
+"Retail Expansion", Market Entry, 3, 11, 18, "Retail; Growth; Kellogg", "Prompt|0;Exhibit 1|1;Scoring Guide|0"`;
+
+const ImportResultModal: React.FC<{
+  result: ImportResult;
+  onClose: () => void;
+}> = ({ result, onClose }) => {
+  return (
+    <div className="modal" onClick={onClose}>
+      <div className="import-form" style={{ maxWidth: '480px', gap: '1.25rem' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{ 
+            background: '#dcfce7', 
+            color: '#16a34a', 
+            borderRadius: '50%', 
+            width: 44, 
+            height: 44, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <CheckCircle2 size={24} />
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>Import Complete</h2>
+            <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+              {result.total} {result.total === 1 ? 'case' : 'cases'} processed successfully.
+            </p>
+          </div>
+        </div>
+
+        {result.replaced.length > 0 ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Replaced Duplicates ({result.replaced.length})
+              </span>
+            </div>
+            <div style={{ 
+              maxHeight: '220px', 
+              overflowY: 'auto', 
+              border: '1px solid var(--border)', 
+              borderRadius: '0.5rem', 
+              background: '#f8fafc',
+              padding: '0.35rem'
+            }}>
+              {result.replaced.map((title, idx) => (
+                <div 
+                  key={idx} 
+                  style={{ 
+                    padding: '0.45rem 0.65rem', 
+                    fontSize: '0.85rem', 
+                    fontWeight: 600, 
+                    color: '#1e293b', 
+                    borderBottom: idx < result.replaced.length - 1 ? '1px solid #e2e8f0' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <span style={{ color: '#94a3b8', fontSize: '0.75rem', minWidth: '18px' }}>{idx + 1}.</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+                </div>
+              ))}
+            </div>
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+              Existing cases in your library were replaced with the imported content.
+            </p>
+          </div>
+        ) : (
+          <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>
+            No existing duplicate cases were replaced.
+          </p>
+        )}
+
+        <div className="form-actions" style={{ marginTop: '0.5rem' }}>
+          <button className="btn btn-primary btn-block" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BulkCsvImporter: React.FC<{
+  onBack: () => void;
+  onSuccess: () => void;
+}> = ({ onBack, onSuccess }) => {
+  const [bulkPdfFile, setBulkPdfFile] = useState<File | null>(null);
+  const [bulkCsvText, setBulkCsvText] = useState('');
+  const [importStatus, setImportStatus] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const [hasCopiedPrompt, setHasCopiedPrompt] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCopyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(LLM_METADATA_PROMPT);
+      setHasCopiedPrompt(true);
+      setTimeout(() => setHasCopiedPrompt(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy prompt', err);
+    }
+  };
+
+  const handleCsvFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const text = await file.text();
+      setBulkCsvText(text);
+      e.target.value = '';
+    }
+  };
+
+  const handleRunImport = async () => {
+    if (!bulkPdfFile) {
+      alert('Please select a Master Casebook PDF file.');
+      return;
+    }
+    if (!bulkCsvText.trim()) {
+      alert('Please provide CSV metadata text or upload a CSV file.');
+      return;
+    }
+
+    setIsProcessing(true);
+    setImportStatus('Starting bulk import...');
+    try {
+      const result = await libraryService.importFromCsv(bulkCsvText, bulkPdfFile, (msg) => setImportStatus(msg));
+      setImportStatus('Import completed successfully!');
+      setIsProcessing(false);
+      setImportResult(result);
+    } catch (err) {
+      console.error('Bulk import error:', err);
+      alert('Bulk import failed. Please verify that the start and end page numbers match your PDF.');
+      setImportStatus('');
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="session-layout">
+      <input
+        type="file"
+        accept=".pdf"
+        ref={pdfInputRef}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) setBulkPdfFile(file);
+        }}
+      />
+      <input
+        type="file"
+        accept=".csv"
+        ref={csvFileInputRef}
+        style={{ display: 'none' }}
+        onChange={handleCsvFileUpload}
+      />
+
+      <header className="session-top-bar">
+        <div className="left-section" style={{ gap: '12px' }}>
+          <div className="header-brand-group" onClick={onBack}>
+            <AppLogo size={32} className="header-logo" />
+            <h2 className="brand-name">ProCase</h2>
+          </div>
+          <div className="header-divider" />
+          <button className="btn btn-ghost btn-sm" onClick={onBack} disabled={isProcessing} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ArrowLeft size={18} /> Back to Settings
+          </button>
+        </div>
+        <div className="center-section">
+          <h2 className="case-name">Bulk Import (CSV + PDF)</h2>
+        </div>
+        <div className="right-section">
+          <div className="breadcrumb-nav">
+            <span className="breadcrumb-muted">Library</span>
+            <span>/</span>
+            <span className="breadcrumb-muted">Settings</span>
+            <span>/</span>
+            <span className="breadcrumb-active">Bulk Import</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="bulk-csv-container">
+        <div className="bulk-header-intro">
+          <h1 className="bulk-header-title">Bulk Casebook Importer</h1>
+          <p className="bulk-header-subtitle">
+            Easily import an entire casebook at once. Simply upload your master casebook PDF alongside AI-generated case metadata (CSV) to automatically slice, categorize, and build each case into your library.
+          </p>
+        </div>
+
+        {/* Step 1: Select Master PDF */}
+        <div className="bulk-step-card">
+          <div className="bulk-step-header">
+            <div className="step-num-pill">1</div>
+            <div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Select Master Casebook PDF</h3>
+              <p className="hint-xs" style={{ margin: 0 }}>The multi-page casebook PDF containing all cases to slice.</p>
+            </div>
+          </div>
+
+          <div
+            className={`file-dropzone-box ${bulkPdfFile ? 'has-file' : ''}`}
+            onClick={() => !isProcessing && pdfInputRef.current?.click()}
+          >
+            {bulkPdfFile ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <CheckCircle2 size={20} color="#16a34a" />
+                <span style={{ fontWeight: 700, color: '#166534' }}>{bulkPdfFile.name}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  ({(bulkPdfFile.size / (1024 * 1024)).toFixed(1)} MB)
+                </span>
+                <button
+                  className="btn-link-sm"
+                  style={{ marginLeft: '1rem', color: '#dc2626' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBulkPdfFile(null);
+                  }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-muted)' }}>
+                <Upload size={28} style={{ margin: '0 auto 0.5rem', display: 'block', opacity: 0.6 }} />
+                <span style={{ fontWeight: 600 }}>Click to browse and select master casebook PDF</span>
+                <p className="hint-xs" style={{ marginTop: '0.25rem' }}>Supports .pdf</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Step 2: CSV Metadata */}
+        <div className="bulk-step-card">
+          <div className="bulk-step-header" style={{ justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div className="step-num-pill">2</div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>Provide Case Metadata (CSV)</h3>
+                <p className="hint-xs" style={{ margin: 0 }}>Map start and end pages, case types, difficulty, and exhibits.</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => csvFileInputRef.current?.click()}
+                disabled={isProcessing}
+              >
+                <Upload size={14} /> Upload .csv
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setBulkCsvText(SAMPLE_CSV)}
+                disabled={isProcessing}
+              >
+                Insert Sample
+              </button>
+            </div>
+          </div>
+
+          {/* How to generate Metadata */}
+          <div className="csv-metadata-guide-box">
+            <div className="guide-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '240px' }}>
+                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a', display: 'block' }}>How to generate Metadata</span>
+                <p style={{ fontSize: '0.83rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0', lineHeight: 1.45 }}>
+                  In order to create Metadata, upload your casebook along with the following prompt to an LLM of your choosing, such as Claude. Then, paste the output below.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleCopyPrompt}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.45rem 0.75rem' }}
+                  title="Copy Prompt to Clipboard"
+                >
+                  {hasCopiedPrompt ? <Check size={15} color="#16a34a" /> : <Copy size={15} />}
+                  <span style={{ fontWeight: 600 }}>{hasCopiedPrompt ? 'Copied Prompt!' : 'Copy Prompt'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setIsPromptExpanded(!isPromptExpanded)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0.45rem 0.75rem' }}
+                  title={isPromptExpanded ? 'Collapse Prompt' : 'Expand Prompt'}
+                >
+                  <span style={{ fontWeight: 600 }}>{isPromptExpanded ? 'Hide Prompt' : 'Expand Prompt'}</span>
+                  <ChevronDown size={15} style={{ transform: isPromptExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+              </div>
+            </div>
+
+            {isPromptExpanded && (
+              <div className="prompt-preview-container">
+                <pre className="prompt-pre-text">{LLM_METADATA_PROMPT}</pre>
+              </div>
+            )}
+          </div>
+
+          <textarea
+            value={bulkCsvText}
+            onChange={(e) => setBulkCsvText(e.target.value)}
+            placeholder="Paste your CSV metadata here or click 'Insert Sample'..."
+            rows={8}
+            disabled={isProcessing}
+            style={{
+              width: '100%',
+              fontFamily: 'monospace',
+              fontSize: '0.82rem',
+              padding: '0.75rem',
+              border: '1px solid var(--border)',
+              borderRadius: '0.5rem',
+              boxSizing: 'border-box',
+              lineHeight: 1.4,
+            }}
+          />
+        </div>
+
+        {importStatus && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', color: 'var(--primary)', fontWeight: 600 }}>
+            {isProcessing && <Loader2 className="animate-spin" size={18} />}
+            <span>{importStatus}</span>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+          <button className="btn btn-ghost" onClick={onBack} disabled={isProcessing}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={handleRunImport}
+            disabled={!bulkPdfFile || !bulkCsvText.trim() || isProcessing}
+            style={{ padding: '0.65rem 1.75rem' }}
+          >
+            {isProcessing ? 'Processing Cases...' : 'Run Bulk Import'}
+          </button>
+        </div>
+      </div>
+      {importResult && (
+        <ImportResultModal
+          result={importResult}
+          onClose={() => {
+            setImportResult(null);
+            onSuccess();
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 // --- Main App ---
 function App() {
   const [role, setRole] = useState<'caser' | 'casee' | null>(null);
-  const [view, setView] = useState<'library' | 'history'>('library');
+  const [view, setView] = useState<'library' | 'history' | 'build-hub' | 'bulk-csv'>('library');
   const [activeCase, setActiveCase] = useState<CasePackage | null>(null);
   const [cases, setCases] = useState<CasePackage[]>([]);
   const [slicingSource, setSlicingSource] = useState<Blob | null>(null);
   const [editingCase, setEditingCase] = useState<CasePackage | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [isBulkImporting, setIsBulkImporting] = useState(false);
-  const [importJson, setImportJson] = useState('');
-  const [bulkCsvText, setBulkCsvText] = useState('');
-  const [bulkPdfFile, setBulkPdfFile] = useState<File | null>(null);
-  const [importStatus, setImportStatus] = useState('');
   const [joinId, setJoinId] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   const [historyCase, setHistoryCase] = useState<CasePackage | null>(null);
   const [historyCaseEntries, setHistoryCaseEntries] = useState<HistoryEntry[]>([]);
-  const createDropdownRef = useRef<HTMLDivElement>(null);
+  const [importJsonResult, setImportJsonResult] = useState<ImportResult | null>(null);
 
   // User profile
   const [userName, setUserNameState] = useState(getUserName);
@@ -1019,8 +1740,8 @@ function App() {
 
     return true;
   }).sort((a, b) => {
-    if (sortBy === 'newest') return (b.id || 0) - (a.id || 0);
-    if (sortBy === 'oldest') return (a.id || 0) - (b.id || 0);
+    if (sortBy === 'newest') return (b.createdAt || 0) - (a.createdAt || 0);
+    if (sortBy === 'oldest') return (a.createdAt || 0) - (b.createdAt || 0);
     if (sortBy === 'difficulty-asc') return a.difficulty - b.difficulty;
     if (sortBy === 'difficulty-desc') return b.difficulty - a.difficulty;
     if (sortBy === 'alphabetical') return a.title.localeCompare(b.title);
@@ -1045,9 +1766,6 @@ function App() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (createDropdownRef.current && !createDropdownRef.current.contains(event.target as Node)) {
-        setShowCreateDropdown(false);
-      }
       if (!(event.target as HTMLElement).closest('.menu-container')) {
         setActiveMenu(null);
       }
@@ -1083,7 +1801,6 @@ function App() {
 
   const CASE_TYPES: string[] = ['M&A', 'Profitability', 'Market Entry', 'Opportunity Assessment', 'Industry Analysis', 'Growth Strategy', 'Pricing', 'Other'];
 
-  const handleReset = async () => { if (window.confirm('Wipe library and all history?')) { await libraryService.clearLibrary(); setCases([]); } };
   const handleDelete = async (id: string, e: React.MouseEvent) => { e.stopPropagation(); if (window.confirm('Delete case?')) { await libraryService.deleteCase(id); const all = await libraryService.getAllCases(); setCases(all); } };
   const handleExport = async (id: string) => {
     try {
@@ -1108,46 +1825,17 @@ function App() {
     } catch (err) { alert('Bulk export failed'); }
   };
 
-  const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImportJsonFile = async (file: File) => {
     try {
       const text = await file.text();
-      await libraryService.importData(text);
+      const result = await libraryService.importData(text);
       const all = await libraryService.getAllCases();
       setCases(all.map(normalizeCase));
-      alert('Import successful!');
-      e.target.value = '';
+      setImportJsonResult(result);
     } catch (err) {
       console.error('Import error:', err);
       alert('Import failed. Ensure the file is a valid ProCase JSON.');
     }
-  };
-
-  const handleJsonImport = async () => { try { await libraryService.importData(importJson); const all = await libraryService.getAllCases(); setCases(all.map(normalizeCase)); setIsImporting(false); setImportJson(''); } catch (err) { alert('Invalid file.'); } };
-
-  const handleBulkCsvImport = async () => {
-    if (!bulkPdfFile || !bulkCsvText) { alert('Please provide both a PDF and CSV text.'); return; }
-    setImportStatus('Processing...');
-    try {
-      await libraryService.importFromCsv(bulkCsvText, bulkPdfFile, (msg) => setImportStatus(msg));
-      const all = await libraryService.getAllCases();
-      setCases(all.map(normalizeCase));
-      setIsBulkImporting(false);
-      setBulkCsvText('');
-      setBulkPdfFile(null);
-      setImportStatus('');
-      alert('Bulk import complete!');
-    } catch (err) {
-      console.error('Bulk import error:', err);
-      alert('Bulk import failed. Check CSV format.');
-      setImportStatus('');
-    }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) { setSlicingSource(file); setShowCreateDropdown(false); }
   };
 
   // --- Render gates ---
@@ -1188,6 +1876,7 @@ function App() {
     <CaseeSession
       initialJoinId={joinId}
       userName={userName}
+      onNameUpdate={(name) => setUserNameState(name)}
       onBack={() => {
         setRole(null);
         setJoinId('');
@@ -1199,13 +1888,21 @@ function App() {
     <CaseSlicer
       sourceBlob={slicingSource || editingCase!.pdfBlob}
       existingCase={editingCase || undefined}
+      backLabel={editingCase ? 'Back to Library' : 'Back to Build Case'}
       onComplete={async () => {
         setSlicingSource(null);
         setEditingCase(null);
+        setView('library');
         const all = await libraryService.getAllCases();
         setCases(all.map(normalizeCase));
       }}
-      onCancel={() => { setSlicingSource(null); setEditingCase(null); }}
+      onCancel={() => {
+        setSlicingSource(null);
+        if (editingCase) {
+          setEditingCase(null);
+          setView('library');
+        }
+      }}
     />
   );
   if (activeCase) return (
@@ -1227,6 +1924,47 @@ function App() {
       onHistoryReset={async () => {
         const all = await libraryService.getAllCases();
         setCases(all.map(normalizeCase));
+      }}
+    />
+  );
+
+  const handleResetLibrary = async () => {
+    if (window.confirm('Wipe entire library and all history? This will permanently delete all cases and session records.')) {
+      await libraryService.clearLibrary();
+      setCases([]);
+      setView('library');
+    }
+  };
+
+  if (view === 'build-hub') return (
+    <>
+      <BuildCaseHub
+        onBack={() => setView('library')}
+        onOpenTool={(file) => setSlicingSource(file)}
+        onOpenBulkCsv={() => setView('bulk-csv')}
+        onImportJson={handleImportJsonFile}
+        onExportJson={handleBulkExport}
+        onResetLibrary={handleResetLibrary}
+      />
+      {importJsonResult && (
+        <ImportResultModal
+          result={importJsonResult}
+          onClose={() => {
+            setImportJsonResult(null);
+            setView('library');
+          }}
+        />
+      )}
+    </>
+  );
+
+  if (view === 'bulk-csv') return (
+    <BulkCsvImporter
+      onBack={() => setView('build-hub')}
+      onSuccess={async () => {
+        const all = await libraryService.getAllCases();
+        setCases(all.map(normalizeCase));
+        setView('library');
       }}
     />
   );
@@ -1272,40 +2010,14 @@ function App() {
           <button className="btn btn-ghost btn-sm" onClick={() => setView('history')} style={{ padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <History size={18} /> <span style={{ fontWeight: 600 }}>View History</span>
           </button>
-          <div className="create-dropdown-wrapper" ref={createDropdownRef}>
-            <button className="btn btn-ghost btn-sm" style={{ padding: '0.5rem' }} onClick={(e) => { e.stopPropagation(); setShowCreateDropdown(!showCreateDropdown); }} title="Create or Import">
-              <Plus size={20} />
-            </button>
-            {showCreateDropdown && (
-              <div className="dropdown-menu">
-                <label className="dropdown-item cursor-pointer">
-                  <Scissors size={16} /> Build Case
-                  <input type="file" accept=".pdf" style={{ display: 'none' }} onChange={handleFileSelect} />
-                </label>
-                <button className="dropdown-item" onClick={() => { setIsBulkImporting(true); setShowCreateDropdown(false); }}>
-                  <Plus size={16} /> Bulk Import (CSV + PDF)
-                </button>
-                <div className="dropdown-divider" />
-                <button className="dropdown-item" onClick={() => { handleBulkExport(); setShowCreateDropdown(false); }}><Download size={16} /> Bulk Export (.json)</button>
-                <label className="dropdown-item cursor-pointer">
-                  <Upload size={16} /> Bulk Import (.json)
-                  <input type="file" accept=".json" style={{ display: 'none' }} onChange={(e) => { handleBulkImport(e); setShowCreateDropdown(false); }} />
-                </label>
-                <div className="dropdown-divider" />
-                <button className="dropdown-item" onClick={async () => {
-                  const csv = await libraryService.exportProgressCsv();
-                  const blob = new Blob([csv], { type: 'text/csv' });
-                  const a = document.createElement('a');
-                  a.href = URL.createObjectURL(blob);
-                  a.download = `ProCase_Progress_${new Date().toISOString().split('T')[0]}.csv`;
-                  a.click();
-                  setShowCreateDropdown(false);
-                }}><FileText size={16} /> Export Progress (.csv)</button>
-                <div className="dropdown-divider" />
-                <button className="dropdown-item text-muted" onClick={() => { handleReset(); setShowCreateDropdown(false); }}><RotateCcw size={16} /> Reset Library</button>
-              </div>
-            )}
-          </div>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setView('build-hub')}
+            style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Settings"
+          >
+            <Settings size={20} />
+          </button>
         </div>
       </header>
 
@@ -1509,47 +2221,6 @@ function App() {
                 </div>
               </div>
             )}
-
-            {isImporting && (
-              <div className="modal">
-                <div className="import-form">
-                  <h2>Import Case</h2>
-                  <textarea value={importJson} onChange={e => setImportJson(e.target.value)} placeholder="Paste JSON here..." rows={8} style={{ width: '100%' }} />
-                  <div className="form-actions"><button className="btn btn-ghost" onClick={() => setIsImporting(false)}>Cancel</button><button className="btn btn-primary" onClick={handleJsonImport}>Import</button></div>
-                </div>
-              </div>
-            )}
-
-            {isBulkImporting && (
-              <div className="modal">
-                <div className="import-form" style={{ maxWidth: '600px' }}>
-                  <h2>Bulk CSV Import</h2>
-                  <p className="hint-xs" style={{ marginBottom: '1rem' }}>Slices a master PDF into individual cases using a metadata CSV.</p>
-                  <div className="form-group" style={{ marginBottom: '1.5rem', textAlign: 'left' }}>
-                    <label className="label-sm">1. Select Master Casebook PDF</label>
-                    <input type="file" accept=".pdf" onChange={e => setBulkPdfFile(e.target.files?.[0] || null)} style={{ marginTop: '0.5rem' }} />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: '1.5rem', textAlign: 'left' }}>
-                    <label className="label-sm">2. Paste CSV Metadata</label>
-                    <textarea
-                      value={bulkCsvText}
-                      onChange={e => setBulkCsvText(e.target.value)}
-                      placeholder="Title, Type, Difficulty, StartPage, EndPage, Tags..."
-                      rows={10}
-                      style={{ width: '100%', marginTop: '0.5rem', fontFamily: 'monospace', fontSize: '0.8rem' }}
-                    />
-                  </div>
-                  {importStatus && <p className="status-text" style={{ fontSize: '0.85rem', color: 'var(--primary)', marginBottom: '1rem' }}>{importStatus}</p>}
-                  <div className="form-actions">
-                    <button className="btn btn-ghost" onClick={() => { setIsBulkImporting(false); setImportStatus(''); }}>Cancel</button>
-                    <button className="btn btn-primary" onClick={handleBulkCsvImport} disabled={!bulkPdfFile || !bulkCsvText || !!importStatus}>
-                      {importStatus ? 'Processing...' : 'Run Bulk Import'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="case-grid">
               {filteredCases.map(c => {
                 const pageCount = c.pages.length;
@@ -1627,7 +2298,16 @@ function App() {
               {filteredCases.length === 0 && (
                 <div className="empty-state-dash">
                   <Info size={48} opacity={0.3} />
-                  <p>{cases.length === 0 ? "Your library is empty. Use the Create menu to begin." : "No cases match your filters."}</p>
+                  <p>{cases.length === 0 ? "Your library is empty. Click the settings gear (⚙) above to get started." : "No cases match your filters."}</p>
+                  {cases.length === 0 && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => setView('build-hub')}
+                      style={{ width: 'auto', padding: '0.65rem 1.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <Settings size={16} /> Import & Build Cases
+                    </button>
+                  )}
                 </div>
               )}
             </div>

@@ -83,10 +83,12 @@ Runs as both a web app (deployed on Vercel at `https://casingautomation.vercel.a
 ## NPM Scripts
 
 ```bash
-npm run dev       # Vite dev server with HMR (http://localhost:5173)
-npm run build     # tsc + vite build → dist/ (web) + dist-electron/ (Electron)
-npm run lint      # ESLint check
-npm run preview   # Preview production build locally
+npm run dev            # Vite dev server with HMR (http://localhost:5173)
+npm run build          # tsc + vite build → dist/ (web) + dist-electron/ (Electron)
+npm run lint           # ESLint check
+npm run preview        # Preview production build locally
+npm run build:packages # Package desktop builds for macOS and Windows (or ./build-packages.sh)
+npm run deploy:vercel  # Verify web build and publish to Vercel production (or ./deploy-vercel.sh)
 ```
 
 No test runner is configured.
@@ -162,7 +164,8 @@ Singleton. All methods are async.
 Key methods:
 - `saveCase(pkg)` — Create/update case in IndexedDB
 - `getCaseById(id)` — Fetch single case
-- `getAllCases()` — Fetch all, reverse-chronological
+- `getAllCases()` — Automatically cleans up duplicate case names via `deduplicateLibrary()`, returns all cases reverse-chronological
+- `deduplicateLibrary()` — Prunes duplicate cases by normalized title, re-links orphaned history entries to surviving case
 - `deleteCase(id)` / `clearLibrary()`
 - `addHistoryEntry(entry)` — Write a `HistoryEntry`; also updates `timesGiven`/`caseeOutcome` on the linked `CasePackage` if `caseId` is set
 - `getAllHistory()` — Fetch all history entries, newest first
@@ -171,8 +174,8 @@ Key methods:
 - `exportCasePackage(id)` — Export as JSON (PDF → base64)
 - `exportLibrary()` — Bulk JSON export
 - `exportProgressCsv()` — Export per-case progress summary as CSV (for club reporting)
-- `importData(jsonStr)` — Single or bulk JSON import
-- `importFromCsv(csvText, pdfBlob, onProgress)` — CSV + master PDF bulk import
+- `importData(jsonStr)` — Single or bulk JSON import (matches duplicates by case name and stomps existing cases in the library with new content)
+- `importFromCsv(csvText, pdfBlob, onProgress)` — CSV + master PDF bulk import (matches duplicates by case name and stomps existing cases in the library with new content)
 
 **CSV import format:**
 ```

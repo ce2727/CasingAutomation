@@ -44,6 +44,11 @@ export interface CasePackage {
   caseeOutcome?: CaseeOutcome;
 }
 
+export interface ImportResult {
+  total: number;
+  replaced: string[];
+}
+
 const db = new Dexie('CasingAppDB') as Dexie & {
   cases: EntityTable<CasePackage, 'id'>;
   history: EntityTable<HistoryEntry, 'id'>;
@@ -106,6 +111,15 @@ db.version(4).stores({
   cases: 'id, title, caseType, difficulty, completed, *tags, createdAt'
 });
 
+export function normalizeCaseTitle(title: string): string {
+  return (title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, ' ');
+}
+
 export const libraryService = {
   // ── Cases ──────────────────────────────────────────────────────────────────
 
@@ -117,7 +131,37 @@ export const libraryService = {
     return await db.cases.get(id);
   },
 
+  async deduplicateLibrary(): Promise<number> {
+    const all = await db.cases.toArray();
+    const map = new Map<string, CasePackage[]>();
+    for (const c of all) {
+      const key = normalizeCaseTitle(c.title);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    }
+
+    let removedCount = 0;
+    for (const [, cases] of map.entries()) {
+      if (cases.length > 1) {
+        // Keep the one with highest timesGiven, or most recent createdAt
+        cases.sort((a, b) => (b.timesGiven || 0) - (a.timesGiven || 0) || b.createdAt - a.createdAt);
+        const keeper = cases[0];
+        for (let i = 1; i < cases.length; i++) {
+          const dup = cases[i];
+          await db.cases.delete(dup.id);
+          const orphanHistory = await db.history.where('caseId').equals(dup.id).toArray();
+          for (const h of orphanHistory) {
+            await db.history.put({ ...h, caseId: keeper.id });
+          }
+          removedCount++;
+        }
+      }
+    }
+    return removedCount;
+  },
+
   async getAllCases() {
+    await this.deduplicateLibrary();
     return await db.cases.reverse().sortBy('createdAt');
   },
 
@@ -209,7 +253,9 @@ export const libraryService = {
     return JSON.stringify(exported);
   },
 
-  async importData(jsonStr: string) {
+  async importData(jsonStr: string): Promise<ImportResult> {
+    const replaced: string[] = [];
+    let total = 0;
     try {
       const data = JSON.parse(jsonStr);
       const items = Array.isArray(data) ? data : [data];
@@ -232,9 +278,38 @@ export const libraryService = {
           continue;
         }
 
+        // Match existing case by name (title) to stomp duplicates
+        const targetTitle = item.title.trim();
+        const normalizedTarget = normalizeCaseTitle(targetTitle);
+        const existingCases = await db.cases
+          .filter(c => normalizeCaseTitle(c.title) === normalizedTarget)
+          .toArray();
+
+        const primaryCase = existingCases[0];
+
+        let caseId: string;
+        if (primaryCase) {
+          caseId = primaryCase.id;
+          replaced.push(primaryCase.title || targetTitle);
+          if (existingCases.length > 1) {
+            for (let k = 1; k < existingCases.length; k++) {
+              await db.cases.delete(existingCases[k].id);
+              const orphanHistory = await db.history.where('caseId').equals(existingCases[k].id).toArray();
+              for (const h of orphanHistory) {
+                await db.history.put({ ...h, caseId });
+              }
+            }
+          }
+        } else if (item.id) {
+          const conflict = await this.getCaseById(item.id);
+          caseId = conflict ? crypto.randomUUID() : item.id;
+        } else {
+          caseId = crypto.randomUUID();
+        }
+
         const casePkg: CasePackage = {
-          id: item.id || crypto.randomUUID(),
-          title: item.title,
+          id: caseId,
+          title: targetTitle || item.title,
           caseType: item.caseType || (item.industry as CaseType) || 'Other',
           difficulty: Number(item.difficulty) || 1,
           tags: Array.isArray(item.tags) ? item.tags : [],
@@ -243,13 +318,15 @@ export const libraryService = {
           pages: item.pages || [],
           createdAt: item.createdAt || Date.now(),
           source: item.source || '',
-          sourceYear: item.sourceYear || 0,
-          timesGiven: item.timesGiven || 0,
+          sourceYear: item.sourceYear ? Number(item.sourceYear) : 0,
+          timesGiven: item.timesGiven ? Number(item.timesGiven) : 0,
           caseeOutcome: item.caseeOutcome || null,
         };
 
         await this.saveCase(casePkg);
+        total++;
       }
+      return { total, replaced };
     } catch (err) {
       console.error('Import process failed:', err);
       throw err;
@@ -281,9 +358,11 @@ export const libraryService = {
     });
   },
 
-  async importFromCsv(csvText: string, pdfBlob: Blob, onProgress?: (msg: string) => void) {
+  async importFromCsv(csvText: string, pdfBlob: Blob, onProgress?: (msg: string) => void): Promise<ImportResult> {
+    const replaced: string[] = [];
+    let total = 0;
     const lines = csvText.split('\n').filter(l => l.trim());
-    if (lines.length === 0) return;
+    if (lines.length === 0) return { total: 0, replaced: [] };
 
     const header = lines[0].toLowerCase();
     const startIndex = header.includes('title') && header.includes('page') ? 1 : 0;
@@ -351,16 +430,42 @@ export const libraryService = {
           }));
         }
 
+        const targetTitle = title.trim();
+        const normalizedTarget = normalizeCaseTitle(targetTitle);
+
+        // Match existing case by name (title) to stomp duplicates
+        const existingCases = await db.cases
+          .filter(c => normalizeCaseTitle(c.title) === normalizedTarget)
+          .toArray();
+
+        const primaryCase = existingCases[0];
+        const caseId = primaryCase?.id || crypto.randomUUID();
+
+        if (primaryCase) {
+          replaced.push(primaryCase.title || targetTitle);
+        }
+
+        // Clean up any extra duplicates that were already in the library
+        if (existingCases.length > 1) {
+          for (let k = 1; k < existingCases.length; k++) {
+            await db.cases.delete(existingCases[k].id);
+            const orphanHistory = await db.history.where('caseId').equals(existingCases[k].id).toArray();
+            for (const h of orphanHistory) {
+              await db.history.put({ ...h, caseId });
+            }
+          }
+        }
+
         const casePkg: CasePackage = {
-          id: crypto.randomUUID(),
-          title,
+          id: caseId,
+          title: targetTitle || title,
           caseType: (type as CaseType) || 'Other',
           difficulty: parseInt(difficulty) || 3,
           tags: tagsStr ? tagsStr.split(';').map(t => t.trim()).filter(Boolean) : [],
           completed: false,
           pdfBlob: slicedBlob,
           pages,
-          createdAt: Date.now(),
+          createdAt: primaryCase?.createdAt || Date.now(),
           source: '',
           sourceYear: 0,
           timesGiven: 0,
@@ -368,9 +473,11 @@ export const libraryService = {
         };
 
         await this.saveCase(casePkg);
+        total++;
       } catch (err) {
         console.error(`Error importing row ${i}:`, err);
       }
     }
+    return { total, replaced };
   }
 };

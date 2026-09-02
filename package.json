@@ -1,14 +1,23 @@
 {
   "name": "casingautomation",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Professional toolkit for MBA casing preparation.",
+  "author": "Stern MCA",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:start": "npm run build && electron .",
+    "package:dir": "npm run build && electron-builder --dir",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win",
+    "package:all": "npm run build && electron-builder -mw",
+    "build:packages": "./build-packages.sh",
+    "deploy:vercel": "./deploy-vercel.sh"
   },
   "build": {
     "appId": "com.casingautomation.app",
@@ -21,10 +30,32 @@
       "dist-electron"
     ],
     "mac": {
-      "icon": "public/desktop-icon.png"
+      "icon": "public/desktop-icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64", "x64"]
+        }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
-      "icon": "public/desktop-icon.png"
+      "icon": "public/desktop-icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ]
     },
     "linux": {
       "icon": "public/desktop-icon.png"

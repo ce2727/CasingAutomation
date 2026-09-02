@@ -1,25 +1,20 @@
-import { BrowserWindow, app } from "electron";
-import path from "path";
-import { fileURLToPath } from "url";
-var __dirname = path.dirname(fileURLToPath(import.meta.url));
-var mainWindow = null;
-function createWindow() {
-	const iconPath = !!process.env.VITE_DEV_SERVER_URL ? path.join(process.cwd(), "public/desktop-icon.png") : path.join(process.cwd(), "dist/desktop-icon.png");
-	if (process.platform === "darwin" && app.dock) app.dock.setIcon(iconPath);
-	mainWindow = new BrowserWindow({
+import { BrowserWindow as e, app as t } from "electron";
+import n from "path";
+import { fileURLToPath as r } from "url";
+var i = n.dirname(r(import.meta.url)), a = null;
+function o() {
+	let r = process.env.VITE_DEV_SERVER_URL ? n.join(process.cwd(), "public/desktop-icon.png") : n.join(process.cwd(), "dist/desktop-icon.png");
+	process.platform === "darwin" && t.dock && t.dock.setIcon(r), a = new e({
 		width: 1200,
 		height: 800,
 		title: "ProCase",
-		icon: iconPath,
+		icon: r,
 		webPreferences: {
-			nodeIntegration: true,
-			contextIsolation: false
+			nodeIntegration: !0,
+			contextIsolation: !1
 		}
-	});
-	if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-	else mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+	}), process.env.VITE_DEV_SERVER_URL ? a.loadURL(process.env.VITE_DEV_SERVER_URL) : a.loadFile(n.join(i, "../dist/index.html"));
 }
-app.whenReady().then(createWindow);
-app.on("window-all-closed", () => {
-	if (process.platform !== "darwin") app.quit();
+t.whenReady().then(o), t.on("window-all-closed", () => {
+	process.platform !== "darwin" && t.quit();
 });

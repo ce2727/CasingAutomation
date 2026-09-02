@@ -1,0 +1,9 @@
+release/
+dist-electron/
+electron/
+scout_casebook.js
+case_map.json
+*.pdf
+*.dmg
+*.exe
+*.zip

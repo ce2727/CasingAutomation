@@ -3,11 +3,12 @@ import { PDFDocument } from 'pdf-lib';
 import { pdfService } from '../services/PdfService';
 import { PDFViewer } from './PDFViewer';
 import { libraryService, type CasePackage, type CasePageMetadata, type CaseType } from '../services/LibraryService';
-import { ArrowLeft, Save, ChevronDown, RotateCcw, Share2, Check, Star, X } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, Share2, Star, X } from 'lucide-react';
 
 interface CaseSlicerProps {
   sourceBlob: Blob;
   existingCase?: CasePackage;
+  backLabel?: string;
   onComplete: () => void;
   onCancel: () => void;
 }
@@ -27,7 +28,7 @@ const CASE_TYPES: CaseType[] = [
   'Industry Analysis', 'Growth Strategy', 'Pricing', 'Other'
 ];
 
-export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase, onComplete, onCancel }) => {
+export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase, backLabel, onComplete, onCancel }) => {
   const [phase, setPhase] = useState<'range' | 'config'>(existingCase ? 'config' : 'range');
   const [totalPages, setTotalPages] = useState(0);
   const [title, setTitle] = useState(existingCase?.title || '');
@@ -37,12 +38,19 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
   const [tagInput, setTagInput] = useState('');
   const [startPage, setStartPage] = useState<string | number>(1);
   const [endPage, setEndPage] = useState<string | number>(existingCase?.pages.length || 1);
+  const [confirmedRange, setConfirmedRange] = useState<{ start: number; end: number } | null>(
+    existingCase ? { start: 1, end: existingCase.pages.length } : null
+  );
   const [pagesMetadata, setPagesMetadata] = useState<CasePageMetadata[]>(existingCase?.pages || []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewPage, setPreviewPage] = useState(1);
   const [pageInputValue, setPageInputValue] = useState('1');
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
+
+  const isRangeDirty = !confirmedRange || 
+    Number(startPage) !== confirmedRange.start || 
+    Number(endPage) !== confirmedRange.end;
 
   // Reset state when source changes (new case or different existing case)
   useEffect(() => {
@@ -57,21 +65,44 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
     if (!existingCase) {
       setStartPage(1);
       setEndPage(1);
+      setConfirmedRange(null);
     } else {
       setStartPage(1);
       setEndPage(existingCase.pages.length);
+      setConfirmedRange({ start: 1, end: existingCase.pages.length });
     }
   }, [existingCase, sourceBlob]);
   
   useEffect(() => {
     if (isInputFocused) return;
-    if (phase === 'config') {
+    if (!isRangeDirty && phase === 'config') {
       setPageInputValue((previewPage - Number(startPage) + 1).toString());
     } else {
       setPageInputValue(previewPage.toString());
     }
-  }, [previewPage, phase, startPage, isInputFocused]);
+  }, [previewPage, phase, startPage, isInputFocused, isRangeDirty]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const configListRef = useRef<HTMLDivElement>(null);
+  const [dropdownDropUp, setDropdownDropUp] = useState(false);
+
+  const handleToggleDropdown = (index: number, wrapperEl?: HTMLElement | null) => {
+    if (activeDropdown === index) {
+      setActiveDropdown(null);
+      return;
+    }
+
+    if (wrapperEl && configListRef.current) {
+      const wrapperRect = wrapperEl.getBoundingClientRect();
+      const listRect = configListRef.current.getBoundingClientRect();
+      const spaceBelow = listRect.bottom - wrapperRect.bottom;
+      const spaceAbove = wrapperRect.top - listRect.top;
+      setDropdownDropUp(spaceBelow < 190 && spaceAbove > spaceBelow);
+    } else {
+      setDropdownDropUp(index >= pagesMetadata.length - 3 && pagesMetadata.length > 3);
+    }
+
+    setActiveDropdown(index);
+  };
 
   const scrollToPage = (pageNum: number) => {
     setPreviewPage(pageNum);
@@ -121,7 +152,7 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
     const start = Number(startPage) || 1;
     const end = Number(endPage) || totalPages;
     const numPages = end - start + 1;
-    if (numPages <= 0) return alert('Invalid range');
+    if (numPages <= 0) return alert('Invalid range: Start page must be less than or equal to End page');
     
     setPagesMetadata(prev => {
       // If we already have metadata, we need to adapt it
@@ -148,6 +179,9 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
       }
     });
     
+    setConfirmedRange({ start, end });
+    setStartPage(start);
+    setEndPage(end);
     setPhase('config');
     setTimeout(() => scrollToPage(start), 100);
   };
@@ -200,8 +234,10 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
     <div className="slicer-container">
       <div className="slicer-sidebar">
         <div className="slicer-header">
-          <button className="btn btn-ghost btn-sm" onClick={onCancel}><ArrowLeft size={16} /> Cancel</button>
-          <h2>Build Case</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onCancel} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ArrowLeft size={16} /> {backLabel || (existingCase ? 'Back to Library' : 'Back to Build Case')}
+          </button>
+          <h2>{existingCase ? 'Edit Case' : 'Case Builder'}</h2>
         </div>
 
         <div className="slicer-form">
@@ -219,14 +255,20 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
             </div>
             <div className="form-group">
               <label>Difficulty</label>
-              <div className="star-rating">
+              <div className={`star-rating diff-${difficulty}`}>
                 {[1, 2, 3, 4, 5].map(star => (
                   <button 
                     key={star} 
-                    className={`star-btn ${difficulty >= star ? 'active' : ''}`}
+                    type="button"
+                    className={`star-btn ${star <= difficulty ? `diff-${difficulty}` : ''}`}
                     onClick={() => setDifficulty(star)}
+                    title={`Difficulty ${star}`}
                   >
-                    <Star size={16} fill={difficulty >= star ? "currentColor" : "none"} />
+                    <Star 
+                      size={18} 
+                      className={star <= difficulty ? 'star-active' : 'star-muted'}
+                      fill={star <= difficulty ? "currentColor" : "none"} 
+                    />
                   </button>
                 ))}
               </div>
@@ -262,14 +304,13 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
 
           <div className="form-group">
             <label>Page Range</label>
-            <div className={`range-selector-box ${phase === 'config' ? 'locked' : ''}`}>
+            <div className="range-selector-box">
               <div className="range-selector-compact">
                 <div className="range-field">
                   <span className="field-label">From</span>
                   <input 
                     type="text" 
                     className="range-input"
-                    disabled={phase === 'config'} 
                     value={startPage} 
                     onChange={e => validateAndSetPage('start', e.target.value)} 
                   />
@@ -279,25 +320,33 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
                   <input 
                     type="text" 
                     className="range-input"
-                    disabled={phase === 'config'} 
                     value={endPage} 
                     onChange={e => validateAndSetPage('end', e.target.value)} 
                   />
                 </div>
-                {phase === 'range' ? (
-                  <button className="btn btn-primary btn-icon-range" title="Set Page Range" onClick={lockRange}><Check size={16} /></button>
-                ) : (
-                  <button className="btn btn-ghost btn-icon-sm" title="Change Range" onClick={() => setPhase('range')}><RotateCcw size={14} /></button>
-                )}
               </div>
             </div>
+            {isRangeDirty && (
+              <button 
+                type="button"
+                className="btn btn-primary btn-sm btn-block" 
+                style={{ marginTop: '0.5rem', padding: '0.55rem', justifyContent: 'center', fontWeight: 600 }}
+                onClick={lockRange}
+              >
+                Confirm Range
+              </button>
+            )}
           </div>
 
-          <div className={`pages-config ${phase === 'range' ? 'disabled' : ''}`}>
+          <div className={`pages-config ${isRangeDirty ? 'disabled' : ''}`}>
             <h4>Configure Pages</h4>
-            <div className="config-list scrollable">
+            <div ref={configListRef} className="config-list scrollable">
               {pagesMetadata.map((page, i) => (
-                <div key={i} className={`config-item ${previewPage === (Number(startPage) + i) ? 'active' : ''}`} onClick={() => setPreviewPage(Number(startPage) + i)}>
+                <div 
+                  key={i} 
+                  className={`config-item ${previewPage === (Number(startPage) + i) ? 'active' : ''} ${activeDropdown === i ? 'dropdown-open' : ''}`} 
+                  onClick={() => setPreviewPage(Number(startPage) + i)}
+                >
                   <div className="config-row">
                     <div className="hybrid-input-wrapper">
                       <input 
@@ -305,11 +354,29 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
                         value={page.title} 
                         onChange={e => updatePageMetadata(i, { title: e.target.value })}
                         placeholder="Page title..."
-                        onClick={e => { e.stopPropagation(); setActiveDropdown(i); }}
+                        onClick={e => { 
+                          e.stopPropagation(); 
+                          handleToggleDropdown(i, e.currentTarget.parentElement); 
+                        }}
                       />
-                      <button className="btn-dropdown-trigger" onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === i ? null : i); }}><ChevronDown size={14} /></button>
+                      <button 
+                        type="button"
+                        className="btn-dropdown-trigger" 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          handleToggleDropdown(i, e.currentTarget.parentElement); 
+                        }}
+                      >
+                        <ChevronDown 
+                          size={14} 
+                          style={{ 
+                            transform: activeDropdown === i ? 'rotate(180deg)' : 'none', 
+                            transition: 'transform 0.2s' 
+                          }} 
+                        />
+                      </button>
                       {activeDropdown === i && (
-                        <div ref={dropdownRef} className="custom-dropdown-list">
+                        <div ref={dropdownRef} className={`custom-dropdown-list ${dropdownDropUp ? 'dropup' : ''}`}>
                           {PRESET_TITLES.map(t => (
                             <div key={t} className="dropdown-opt" onClick={(e) => { e.stopPropagation(); updatePageMetadata(i, { title: t }); }}>{t}</div>
                           ))}
@@ -330,7 +397,7 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
             </div>
           </div>
 
-          <button className="btn btn-primary btn-block" onClick={handleSave} disabled={isProcessing || phase === 'range'}>
+          <button className="btn btn-primary btn-block" onClick={handleSave} disabled={isProcessing || isRangeDirty}>
             {isProcessing ? <div className="animate-spin">🌀</div> : <><Save size={18} /> Save Individual Case</>}
           </button>
         </div>
@@ -338,10 +405,10 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
 
       <div className="slicer-preview">
         <div className="preview-nav">
-          <button className="btn btn-ghost btn-sm" disabled={previewPage <= (phase === 'config' ? Number(startPage) : 1)} onClick={() => scrollToPage(Math.max(1, previewPage - 1))}>Prev</button>
+          <button className="btn btn-ghost btn-sm" disabled={previewPage <= (!isRangeDirty && phase === 'config' ? Number(startPage) : 1)} onClick={() => scrollToPage(Math.max(1, previewPage - 1))}>Prev</button>
           
           <div className="preview-page-input">
-            {phase === 'config' ? (
+            {!isRangeDirty && phase === 'config' ? (
               <>
                 <span>Case Page</span>
                 <input 
@@ -395,13 +462,13 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
             )}
           </div>
 
-          <button className="btn btn-ghost btn-sm" disabled={previewPage >= (phase === 'config' ? Number(endPage) : totalPages)} onClick={() => scrollToPage(Math.min(totalPages, previewPage + 1))}>Next</button>
+          <button className="btn btn-ghost btn-sm" disabled={previewPage >= (!isRangeDirty && phase === 'config' ? Number(endPage) : totalPages)} onClick={() => scrollToPage(Math.min(totalPages, previewPage + 1))}>Next</button>
         </div>
         <div 
           className="preview-scroll-container"
           onScroll={(e) => {
             const scrollPos = e.currentTarget.scrollTop + 150;
-            const range = phase === 'config' 
+            const range = (!isRangeDirty && phase === 'config')
               ? Array.from({ length: Number(endPage) - Number(startPage) + 1 }, (_, i) => Number(startPage) + i)
               : Array.from({ length: totalPages }, (_, i) => i + 1);
             
@@ -415,7 +482,7 @@ export const CaseSlicer: React.FC<CaseSlicerProps> = ({ sourceBlob, existingCase
           }}
         >
           <div className="pdf-container-vertical">
-            {(phase === 'config' 
+            {((!isRangeDirty && phase === 'config')
               ? Array.from({ length: Number(endPage) - Number(startPage) + 1 }, (_, i) => Number(startPage) + i)
               : Array.from({ length: totalPages }, (_, i) => i + 1)
             ).map(p => (

@@ -5,13 +5,14 @@ export type MessageType = 'SESSION_INIT' | 'REVEAL_PAGE' | 'SYNC_STATE' | 'TIMER
 export interface PeerMessage {
   type: MessageType;
   payload: any;
+  senderPeerId?: string;
 }
 
 export class PeerService {
   private peer: Peer | null = null;
   private connections: DataConnection[] = [];
   private onMessageCallback: ((message: PeerMessage) => void) | null = null;
-  private onConnectionChangeCallback: ((count: number) => void) | null = null;
+  private onConnectionChangeCallback: ((count: number, activePeerIds?: string[]) => void) | null = null;
   private onOpenCallback: ((id: string) => void) | null = null;
   private onErrorCallback: ((err: string) => void) | null = null;
   private lastSessionInit: any = null;
@@ -56,7 +57,7 @@ export class PeerService {
   public onOpen(callback: (id: string) => void) { this.onOpenCallback = callback; if (this.peer?.id && this.peer.open) callback(this.peer.id); }
   public onError(callback: (err: string) => void) { this.onErrorCallback = callback; }
   public onMessage(callback: (message: PeerMessage) => void) { this.onMessageCallback = callback; }
-  public onConnectionCountChange(callback: (count: number) => void) { this.onConnectionChangeCallback = callback; }
+  public onConnectionCountChange(callback: (count: number, activePeerIds?: string[]) => void) { this.onConnectionChangeCallback = callback; }
 
   public host() {
     if (!this.peer) this.init();
@@ -69,7 +70,7 @@ export class PeerService {
 
       conn.on('open', () => {
         this.connections.push(conn);
-        this.onConnectionChangeCallback?.(this.connections.length);
+        this.onConnectionChangeCallback?.(this.connections.length, this.connections.map(c => c.peer));
 
         // Catch up the new peer immediately
         if (this.lastSessionInit) {
@@ -79,13 +80,18 @@ export class PeerService {
         }
       });
 
-      conn.on('data', (data: any) => this.onMessageCallback?.(data as PeerMessage));
+      conn.on('data', (data: any) => {
+        if (data && typeof data === 'object') {
+          data.senderPeerId = conn.peer;
+        }
+        this.onMessageCallback?.(data as PeerMessage);
+      });
 
       const cleanup = () => {
         const initialLength = this.connections.length;
         this.connections = this.connections.filter(c => c.peer !== conn.peer);
         if (this.connections.length !== initialLength) {
-          this.onConnectionChangeCallback?.(this.connections.length);
+          this.onConnectionChangeCallback?.(this.connections.length, this.connections.map(c => c.peer));
         }
       };
 
