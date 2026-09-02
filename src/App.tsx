@@ -179,6 +179,9 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
   const activePeersMapRef = useRef<Map<string, string>>(new Map());
   const [peerCaseeName, setPeerCaseeName] = useState<string | null>(null);
   const [connectedNames, setConnectedNames] = useState<string[]>([]);
+  const [showPostSession, setShowPostSession] = useState(false);
+  const [caserNotes, setCaserNotes] = useState('');
+  const [caserRating, setCaserRating] = useState(0);
 
   useEffect(() => {
     const load = async () => { const doc = await pdfService.loadDocument(caseFile.pdfBlob, caseFile.id); setTotalPages(doc.numPages); };
@@ -282,36 +285,114 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
   const resetTimer = () => { startTimeRef.current = null; accumulatedTimeRef.current = 0; setSeconds(0); setTimerActive(false); peerService.send('TIMER_SYNC', { seconds: 0, isActive: false }); };
   const scrollToPage = (pageNum: number) => { setCurrentPage(pageNum); document.getElementById(`caser-page-${pageNum}`)?.scrollIntoView({ behavior: 'smooth' }); };
 
-  const handleExitClick = async () => {
+  const getPartnerString = () => {
+    const allUniqueUsers = Array.from(allSessionUsersRef.current);
+    return allUniqueUsers.length > 0
+      ? allUniqueUsers.join(', ')
+      : (connectedNames.length > 0 ? connectedNames.join(', ') : (peerCaseeName || undefined));
+  };
+
+  const handleExitClick = () => {
     if (timerActive) setTimerActive(false);
-    
-    // If we had a peer, automatically save the session before exiting
+
     if (hadPeerRef.current) {
       peerService.send('SESSION_END', {});
-      const allUniqueUsers = Array.from(allSessionUsersRef.current);
-      const partnerString = allUniqueUsers.length > 0
-        ? allUniqueUsers.join(', ')
-        : (connectedNames.length > 0 ? connectedNames.join(', ') : (peerCaseeName || undefined));
-
-      await libraryService.addHistoryEntry({
-        role: 'caser',
-        date: Date.now(),
-        caseId: caseFile.id,
-        caseTitle: caseFile.title,
-        casebook: caseFile.source || undefined,
-        partnerName: partnerString,
-        durationSeconds: seconds,
-        outcome: 'given',
-      });
-      const updated = await libraryService.getCaseById(caseFile.id);
-      peerService.destroy();
-      onBack(updated as CasePackage | undefined);
+      setShowPostSession(true);
     } else {
-      // No peer, just exit
       peerService.destroy();
       onBack();
     }
   };
+
+  const handleSaveCaserSession = async (saveNotes: boolean) => {
+    const partnerString = getPartnerString();
+    await libraryService.addHistoryEntry({
+      role: 'caser',
+      date: Date.now(),
+      caseId: caseFile.id,
+      caseTitle: caseFile.title,
+      casebook: caseFile.source || undefined,
+      partnerName: partnerString,
+      durationSeconds: seconds,
+      selfRating: (saveNotes && caserRating > 0) ? caserRating : undefined,
+      notes: (saveNotes && caserNotes.trim()) ? caserNotes.trim() : undefined,
+      outcome: 'given',
+    });
+    const updated = await libraryService.getCaseById(caseFile.id);
+    peerService.destroy();
+    onBack(updated as CasePackage | undefined);
+  };
+
+  if (showPostSession) {
+    const partnerString = getPartnerString();
+    return (
+      <div className="landing-container">
+        <div className="loader-container" style={{ maxWidth: '440px' }}>
+          <h2 style={{ marginBottom: '0.25rem' }}>Session Complete</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+            <strong>{caseFile.title}</strong>
+            {partnerString && <span> with <strong>{partnerString}</strong></span>}
+          </p>
+          {seconds > 0 && (
+            <p className="hint-xs" style={{ marginBottom: '1.25rem' }}>
+              Duration: {formatTime(seconds)}
+            </p>
+          )}
+
+          <div className="form-group" style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+            <label className="label-sm" style={{ fontWeight: 600, color: '#334155', marginBottom: '0.5rem', display: 'block' }}>
+              Delivery / Experience Rating (optional)
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+              {[1, 2, 3, 4, 5].map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setCaserRating(caserRating === s ? 0 : s)}
+                  className={`star-btn ${caserRating >= s ? getDifficultyClass(caserRating) : ''}`}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+                >
+                  <Star size={26} fill={s <= caserRating ? 'currentColor' : 'none'} className={s <= caserRating ? 'star-active' : 'star-muted'} />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ textAlign: 'left', width: '100%', marginBottom: '1.25rem' }}>
+            <label className="label-sm" style={{ fontWeight: 600, color: '#334155' }}>
+              Session Notes & Reflection
+            </label>
+            <textarea
+              value={caserNotes}
+              onChange={e => setCaserNotes(e.target.value)}
+              placeholder="Things that went well, things that didn't go so well, notes for next time..."
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '0.65rem 0.75rem',
+                border: '1px solid var(--border)',
+                borderRadius: '0.5rem',
+                fontSize: '0.875rem',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                marginTop: '0.35rem',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+            <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '0.875rem' }} onClick={() => handleSaveCaserSession(true)}>
+              <CheckCircle2 size={18} /> Save & Finish
+            </button>
+            <button className="btn btn-ghost" style={{ justifyContent: 'center' }} onClick={() => handleSaveCaserSession(false)}>
+              Skip Notes
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="session-layout">
@@ -439,6 +520,7 @@ const CaseeSession: React.FC<{
   const [showTimer, setShowTimer] = useState(false);
   const [showPostSession, setShowPostSession] = useState(false);
   const [postRating, setPostRating] = useState(0);
+  const [postNotes, setPostNotes] = useState('');
 
   // Casee name management
   const [caseeName, setCaseeName] = useState(() => initialUserName || getUserName() || '');
@@ -595,6 +677,7 @@ const CaseeSession: React.FC<{
         partnerName: sessionData.caserName || undefined,
         durationSeconds: seconds,
         rating: postRating > 0 ? postRating : undefined,
+        notes: postNotes.trim() || undefined,
         outcome,
       });
     }
@@ -665,6 +748,29 @@ const CaseeSession: React.FC<{
                 <Star size={28} fill={s <= postRating ? 'currentColor' : 'none'} className={s <= postRating ? 'star-active' : 'star-muted'} />
               </button>
             ))}
+          </div>
+
+          <div className="form-group" style={{ textAlign: 'left', width: '100%', marginBottom: '1.25rem' }}>
+            <label className="label-sm" style={{ fontWeight: 600, color: '#334155' }}>
+              Session Notes & Reflection
+            </label>
+            <textarea
+              value={postNotes}
+              onChange={e => setPostNotes(e.target.value)}
+              placeholder="Things that went well, things that didn't go so well, notes for next time..."
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '0.65rem 0.75rem',
+                border: '1px solid var(--border)',
+                borderRadius: '0.5rem',
+                fontSize: '0.875rem',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                marginTop: '0.35rem',
+              }}
+            />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
@@ -816,6 +922,21 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
   const [exportReceived, setExportReceived] = useState(true);
   const [exportObserved, setExportObserved] = useState(true);
   const [exportGave, setExportGave] = useState(false);
+  const [editingNoteEntry, setEditingNoteEntry] = useState<HistoryEntry | null>(null);
+  const [noteText, setNoteText] = useState('');
+
+  const handleOpenNoteEdit = (entry: HistoryEntry) => {
+    setEditingNoteEntry(entry);
+    setNoteText(entry.notes || '');
+  };
+
+  const handleSaveNote = async () => {
+    if (!editingNoteEntry) return;
+    const trimmed = noteText.trim();
+    await libraryService.updateHistoryEntry(editingNoteEntry.id, { notes: trimmed || undefined });
+    setEntries(prev => prev.map(e => e.id === editingNoteEntry.id ? { ...e, notes: trimmed || undefined } : e));
+    setEditingNoteEntry(null);
+  };
 
   const handleExportCsv = async () => {
     try {
@@ -992,8 +1113,8 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
               <textarea
                 value={manual.notes || ''}
                 onChange={e => setManual(m => ({ ...m, notes: e.target.value }))}
-                placeholder="Any notes about the session..."
-                rows={2}
+                placeholder="Things that went well, things that didn't go so well, notes for next time..."
+                rows={3}
                 style={{ width: '100%', marginTop: '0.25rem' }}
               />
             </div>
@@ -1090,6 +1211,60 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
         </div>
       )}
 
+      {editingNoteEntry && (
+        <div className="modal">
+          <div className="import-form" style={{ maxWidth: '460px', gap: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Session Notes</h2>
+                <p className="hint-xs" style={{ marginTop: '0.25rem', marginBottom: 0 }}>
+                  <strong>{editingNoteEntry.caseTitle}</strong>
+                  {editingNoteEntry.partnerName && <span> · with {editingNoteEntry.partnerName}</span>}
+                  <span> · {new Date(editingNoteEntry.date).toLocaleDateString()}</span>
+                </p>
+              </div>
+              <button 
+                className="btn btn-ghost btn-sm" 
+                style={{ padding: '0.25rem', borderRadius: '50%' }} 
+                onClick={() => setEditingNoteEntry(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="form-group" style={{ width: '100%' }}>
+              <label className="label-sm" style={{ fontWeight: 600, color: '#334155' }}>
+                Reflections & Performance Notes
+              </label>
+              <textarea
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="Things that went well, things that didn't go so well, notes for next time..."
+                rows={5}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid var(--border)',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.9rem',
+                  boxSizing: 'border-box',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  marginTop: '0.35rem',
+                  lineHeight: 1.5,
+                }}
+              />
+            </div>
+
+            <div className="form-actions">
+              <button className="btn btn-ghost" onClick={() => setEditingNoteEntry(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSaveNote}>Save Notes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="session-top-bar">
         <div className="left-section" style={{ gap: '12px' }}>
           <div className="header-brand-group" onClick={onBack}>
@@ -1180,32 +1355,53 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
                   const oc = outcomeLabel(entry.outcome);
                   return (
                     <div key={entry.id} className="history-row">
-                      <div className="history-row-left">
-                        <div className="history-col-status">
-                          <span className="history-outcome-pill" style={{ background: oc.bg, color: oc.color }}>{oc.label}</span>
+                      <div className="history-row-main">
+                        <div className="history-row-left">
+                          <div className="history-col-status">
+                            <span className="history-outcome-pill" style={{ background: oc.bg, color: oc.color }}>{oc.label}</span>
+                          </div>
+                          <div className="history-col-title">
+                            <span className="history-case-title">{entry.caseTitle}</span>
+                            {entry.casebook && <span className="history-casebook-text">· {entry.casebook}</span>}
+                          </div>
+                          <div className="history-col-partner">
+                            {entry.partnerName ? (
+                              <span className="meta-item-with-icon">
+                                <User size={11} /> {entry.partnerName}
+                              </span>
+                            ) : <span className="text-muted">—</span>}
+                          </div>
+                          <div className="history-col-duration">
+                            {entry.durationSeconds > 0 ? (
+                              <span className="meta-item-with-icon">
+                                <Clock size={11} /> {formatTime(entry.durationSeconds)}
+                              </span>
+                            ) : <span className="text-muted">—</span>}
+                          </div>
                         </div>
-                        <div className="history-col-title">
-                          <span className="history-case-title">{entry.caseTitle}</span>
-                          {entry.casebook && <span className="history-casebook-text">· {entry.casebook}</span>}
-                        </div>
-                        <div className="history-col-partner">
-                          {entry.partnerName ? (
-                            <span className="meta-item-with-icon">
-                              <User size={11} /> {entry.partnerName}
-                            </span>
-                          ) : <span className="text-muted">—</span>}
-                        </div>
-                        <div className="history-col-duration">
-                          {entry.durationSeconds > 0 ? (
-                            <span className="meta-item-with-icon">
-                              <Clock size={11} /> {formatTime(entry.durationSeconds)}
-                            </span>
-                          ) : <span className="text-muted">—</span>}
+                        <div className="history-row-right" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <span className="history-date-text">{new Date(entry.date).toLocaleDateString()}</span>
+                          <button 
+                            className="btn btn-ghost btn-xs" 
+                            style={{ padding: '0.2rem 0.5rem', color: 'var(--primary)', fontWeight: 600 }}
+                            onClick={() => handleOpenNoteEdit(entry)}
+                            title={entry.notes ? 'Edit notes' : 'Add notes'}
+                          >
+                            {entry.notes ? 'Edit' : '+ Note'}
+                          </button>
                         </div>
                       </div>
-                      <div className="history-row-right">
-                        <span className="history-date-text">{new Date(entry.date).toLocaleDateString()}</span>
-                      </div>
+
+                      {entry.notes ? (
+                        <div className="history-notes-banner" onClick={() => handleOpenNoteEdit(entry)} title="Click to edit notes">
+                          <span className="history-notes-label">Notes:</span>
+                          <span className="history-notes-text">{entry.notes}</span>
+                        </div>
+                      ) : (
+                        <div className="history-notes-banner history-notes-empty" onClick={() => handleOpenNoteEdit(entry)} title="Add notes for this session">
+                          <span className="history-notes-add-hint">+ Add session notes (what went well, areas to improve, next steps...)</span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -219,6 +219,12 @@ export const libraryService = {
     return await db.history.delete(id);
   },
 
+  async updateHistoryEntry(id: string, updates: Partial<HistoryEntry>): Promise<void> {
+    const existing = await db.history.get(id);
+    if (!existing) return;
+    await db.history.put({ ...existing, ...updates });
+  },
+
   // ── Export / Import ────────────────────────────────────────────────────────
 
   async exportCasePackage(id: string): Promise<string> {

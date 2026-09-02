@@ -1238,9 +1238,9 @@ textarea:focus {
 
 .history-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
   padding: 0.875rem 1.25rem;
   background: white;
   border: 1px solid var(--border);
@@ -1250,6 +1250,70 @@ textarea:focus {
 
 .history-row:hover {
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.history-row-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+.history-notes-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  font-size: 0.825rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.history-notes-banner:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.history-notes-label {
+  font-weight: 700;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.history-notes-text {
+  color: #334155;
+  flex: 1;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.history-notes-edit-btn {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.history-notes-empty {
+  opacity: 0.65;
+  border-style: dashed;
+  padding: 0.4rem 0.75rem;
+}
+
+.history-notes-empty:hover {
+  opacity: 1;
+}
+
+.history-notes-add-hint {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 0.8rem;
 }
 
 .history-row-left {
