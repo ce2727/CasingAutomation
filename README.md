@@ -6,6 +6,14 @@ ProCase is designed for consulting clubs and MBA students practicing case interv
 
 Live Web App: [https://casingautomation.vercel.app](https://casingautomation.vercel.app)
 
+### 📥 Download Desktop App
+| Platform | Download Link | Notes |
+| :--- | :--- | :--- |
+| 🍏 **Mac (Apple Silicon)** | [**Download for Mac (Apple Silicon)**](https://github.com/ce2727/CasingAutomation/releases/latest/download/ProCase-macOS-arm64.dmg) | *For M1, M2, M3, M4 Macs (2020+)* |
+| 🍏 **Mac (Intel)** | [**Download for Mac (Intel)**](https://github.com/ce2727/CasingAutomation/releases/latest/download/ProCase-macOS-x64.dmg) | *For older Macs (2019 and earlier)* |
+| 🪟 **Windows PC** | [**Download for Windows (.exe)**](https://github.com/ce2727/CasingAutomation/releases/latest/download/ProCase-Windows-Setup.exe) | *Setup installer for Windows 10 & 11* |
+| 🌐 **Web Version** | [**Launch Web App**](https://casingautomation.vercel.app) | *Instant browser join for Casees* |
+
 ---
 
 ## Key Features

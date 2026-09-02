@@ -37,20 +37,20 @@ npm run build
 case "$TARGET" in
   mac|macos)
     echo
-    echo "==> Step 2: Packaging for macOS (dmg + zip for arm64 & x64)..."
+    echo "==> Step 2: Packaging for macOS (DMG for arm64 & x64)..."
     npx electron-builder --mac
     ;;
   win|windows)
     echo
-    echo "==> Step 2: Packaging for Windows (nsis installer + zip for x64)..."
+    echo "==> Step 2: Packaging for Windows (NSIS installer for x64)..."
     npx electron-builder --win
     ;;
   all|both)
     echo
-    echo "==> Step 2: Packaging for macOS (dmg + zip for arm64 & x64)..."
+    echo "==> Step 2: Packaging for macOS (DMG for arm64 & x64)..."
     npx electron-builder --mac
     echo
-    echo "==> Step 3: Packaging for Windows (nsis installer + zip for x64)..."
+    echo "==> Step 3: Packaging for Windows (NSIS installer for x64)..."
     npx electron-builder --win
     ;;
   *)

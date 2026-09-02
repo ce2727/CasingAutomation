@@ -63,7 +63,7 @@ jobs:
       - name: Build Web & Electron
         run: npm run build
 
-      - name: Package macOS (.dmg, .zip)
+      - name: Package macOS (.dmg)
         run: npx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -72,9 +72,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-packages
-          path: |
-            release/*.dmg
-            release/*.zip
+          path: release/*.dmg
           if-no-files-found: error
 
   build-windows:
@@ -99,7 +97,7 @@ jobs:
       - name: Build Web & Electron
         run: npm run build
 
-      - name: Package Windows (.exe, .zip)
+      - name: Package Windows (.exe)
         run: npx electron-builder --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -108,9 +106,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-packages
-          path: |
-            release/*.exe
-            release/*.zip
+          path: release/*.exe
           if-no-files-found: error
 
   publish-release:
@@ -127,6 +123,16 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
+      - name: Clean up previous release (if re-running same version)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RAW_VERSION="${{ github.event.inputs.version }}"
+          VERSION=$(echo "$RAW_VERSION" | sed 's/^v//')
+          TAG="v$VERSION"
+          echo "Checking for existing release tag $TAG..."
+          gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
+
       - name: Create GitHub Release with Downloads
         uses: softprops/action-gh-release@v2
         with:
@@ -140,9 +146,9 @@ jobs:
             ### 🍏 Mac Downloads & Setup
 
             #### 1. Download for your Mac:
-            - [🍏 **Download for Mac (Apple Silicon)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}-arm64.dmg)  
+            - [🍏 **Download for Mac (Apple Silicon)**](https://github.com/ce2727/CasingAutomation/releases/latest/download/ProCase-macOS-arm64.dmg)  
               *Recommended for M1, M2, M3, M4 Macs (2020 or newer)*
-            - [🍏 **Download for Mac (Intel)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}.dmg)  
+            - [🍏 **Download for Mac (Intel)**](https://github.com/ce2727/CasingAutomation/releases/latest/download/ProCase-macOS-x64.dmg)  
               *For older Macs (2019 or earlier)*
 
             #### 2. Install & Security Instructions:
@@ -167,13 +173,13 @@ jobs:
             ### 🪟 Windows Download & Setup
 
             #### 1. Download for Windows:
-            - [🪟 **Download ProCase for Windows (.exe)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase%20Setup%20${{ github.event.inputs.version }}.exe)  
+            - [🪟 **Download ProCase for Windows (.exe)**](https://github.com/ce2727/CasingAutomation/releases/latest/download/ProCase-Windows-Setup.exe)  
               *Setup installer for Windows 10 & 11*
 
             #### 2. Install & Security Instructions:
             Because ProCase is a free open-source application and does not use an expensive corporate code-signing certificate, Windows Defender SmartScreen may display an alert on first launch stating *"Windows protected your PC"*.
 
-            1. Double-click the downloaded `ProCase Setup.exe` file.
+            1. Double-click the downloaded `ProCase-Windows-Setup.exe` file.
             2. If a blue **Windows protected your PC** (SmartScreen) popup appears:
                - Click the small blue text link that says **More info**.
                - A new button will appear: click **Run anyway**.
@@ -192,11 +198,10 @@ jobs:
             - **To give cases or manage your library:** You **must** download and install the desktop app for **Mac** or **Windows** above.
 
             ---
-            *All individual build files and portable .zip archives are listed below under **Assets**.*
+            *The 3 installer packages (macOS Apple Silicon .dmg, macOS Intel .dmg, and Windows .exe) are also listed below under **Assets**.*
           files: |
             release-artifacts/*.dmg
             release-artifacts/*.exe
-            release-artifacts/*.zip
           draft: false
           prerelease: false
         env:
