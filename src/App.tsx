@@ -2138,6 +2138,26 @@ function App() {
               <button className="btn btn-ghost" onClick={() => setShowNameEdit(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={() => handleSaveName(nameEditValue)} disabled={!nameEditValue.trim()}>Save</button>
             </div>
+            {isElectron && (
+              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                <span className="hint-xs">Desktop App</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  style={{ color: 'var(--primary)', fontWeight: 600 }}
+                  onClick={() => {
+                    try {
+                      const { ipcRenderer } = (window as any).require('electron');
+                      ipcRenderer.invoke('check-for-updates');
+                    } catch (err) {
+                      console.error('Failed to trigger update check:', err);
+                    }
+                  }}
+                >
+                  Check for Updates
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2269,6 +2289,26 @@ function App() {
               <button className="btn btn-ghost" onClick={() => setShowNameEdit(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={() => handleSaveName(nameEditValue)} disabled={!nameEditValue.trim()}>Save</button>
             </div>
+            {isElectron && (
+              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                <span className="hint-xs">Desktop App</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  style={{ color: 'var(--primary)', fontWeight: 600 }}
+                  onClick={() => {
+                    try {
+                      const { ipcRenderer } = (window as any).require('electron');
+                      ipcRenderer.invoke('check-for-updates');
+                    } catch (err) {
+                      console.error('Failed to trigger update check:', err);
+                    }
+                  }}
+                >
+                  Check for Updates
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

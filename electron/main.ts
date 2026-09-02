@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell, Menu, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -45,8 +45,17 @@ function getTargetAsset(assets: ReleaseAsset[] = []): { name: string; url: strin
   };
 }
 
-async function checkForUpdates() {
+async function checkForUpdates(manual = false) {
   if (process.env.VITE_DEV_SERVER_URL || !app.isPackaged) {
+    if (manual && mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Check for Updates',
+        message: 'Running in development mode',
+        detail: 'Auto-update is only active when running a packaged application.',
+        buttons: ['OK'],
+      });
+    }
     return;
   }
 
@@ -56,7 +65,20 @@ async function checkForUpdates() {
       headers: { 'User-Agent': 'ProCase-Desktop-App' },
     });
 
-    if (!response.ok) return;
+    if (!response.ok) {
+      if (manual && mainWindow) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'warning',
+          title: 'Update Check Failed',
+          message: `Unable to check for updates (Status ${response.status}).`,
+          detail: response.status === 403
+            ? 'GitHub API rate limit reached. Please try again in a few minutes or check GitHub releases directly.'
+            : 'Could not fetch release information from GitHub.',
+          buttons: ['OK'],
+        });
+      }
+      return;
+    }
 
     const data = (await response.json()) as {
       tag_name?: string;
@@ -65,6 +87,19 @@ async function checkForUpdates() {
     };
     const latestTag = data.tag_name || '';
     const latestVersion = latestTag.replace(/^v/, '').trim();
+
+    if (!latestVersion || !isNewerVersion(currentVersion, latestVersion)) {
+      if (manual && mainWindow) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: "You're Up to Date",
+          message: `ProCase v${currentVersion} is the latest version.`,
+          detail: 'There are no newer updates available at this time.',
+          buttons: ['OK'],
+        });
+      }
+      return;
+    }
 
     if (latestVersion && isNewerVersion(currentVersion, latestVersion) && mainWindow) {
       const targetAsset = getTargetAsset(data.assets);
@@ -206,9 +241,104 @@ function createWindow() {
   }
 }
 
+function setupAppMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              {
+                label: 'Check for Updates...',
+                click: () => checkForUpdates(true),
+              },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [isMac ? { role: 'close' as const } : { role: 'quit' as const }],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' as const },
+        { role: 'redo' as const },
+        { type: 'separator' as const },
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        { role: 'selectAll' as const },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' as const },
+        { role: 'forceReload' as const },
+        { type: 'separator' as const },
+        { role: 'togglefullscreen' as const },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' as const },
+        { role: 'zoom' as const },
+        ...(isMac
+          ? [{ type: 'separator' as const }, { role: 'front' as const }, { type: 'separator' as const }, { role: 'window' as const }]
+          : [{ role: 'close' as const }]),
+      ],
+    },
+    {
+      role: 'help' as const,
+      submenu: [
+        ...(!isMac
+          ? [
+              {
+                label: 'Check for Updates...',
+                click: () => checkForUpdates(true),
+              },
+              { type: 'separator' as const },
+            ]
+          : []),
+        {
+          label: 'ProCase GitHub Repository',
+          click: async () => {
+            await shell.openExternal('https://github.com/ce2727/CasingAutomation');
+          },
+        },
+        {
+          label: 'View Latest Releases',
+          click: async () => {
+            await shell.openExternal('https://github.com/ce2727/CasingAutomation/releases/latest');
+          },
+        },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 app.whenReady().then(() => {
+  setupAppMenu();
+  ipcMain.handle('check-for-updates', () => checkForUpdates(true));
   createWindow();
-  setTimeout(checkForUpdates, 3000);
+  setTimeout(() => checkForUpdates(false), 3000);
 });
 
 app.on('activate', () => {
