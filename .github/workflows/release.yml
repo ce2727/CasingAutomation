@@ -127,37 +127,24 @@ jobs:
           tag_name: v${{ github.event.inputs.version }}
           name: ProCase v${{ github.event.inputs.version }}
           body: |
-            ## Quick Downloads for ProCase v${{ github.event.inputs.version }}
-
-            Choose your operating system below to download the app:
-
-            | Platform | Download Link | Notes |
-            | :--- | :--- | :--- |
-            | **Mac (Apple Silicon)** | [Download for Mac (Apple Silicon)](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}-arm64.dmg) | *Recommended for M1, M2, M3, M4 Macs (2020+)* |
-            | **Mac (Intel)** | [Download for Mac (Intel)](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}.dmg) | *For older Macs (2019 or earlier)* |
-            | **Windows PC** | [Download for Windows (.exe)](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase%20Setup%20${{ github.event.inputs.version }}.exe) | *Setup installer for Windows 10 & 11* |
-            | **Web Version** *(Casee Only)* | [Launch Web Version](https://casingautomation.vercel.app) | *Join a partner's session only (cannot give cases)* |
+            ## ProCase v${{ github.event.inputs.version }}
 
             ---
 
-            ### Important Note on the Web Version: Casee Only (Joining Sessions)
+            ### Mac Downloads & Setup
 
-            The **Web Version** at [casingautomation.vercel.app](https://casingautomation.vercel.app) is **not** the full application:
-            - **What it does:** Allows you to quickly join someone else's case session as a **Casee / Interviewee** in your browser without installing software.
-            - **What it cannot do:** You cannot give cases, access or manage a case library, build cases, or track casing history.
-            - **To give cases or manage your own library:** You **must** download and install the desktop app for **Mac** or **Windows** above.
+            #### 1. Download for your Mac:
+            - [**Download for Mac (Apple Silicon)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}-arm64.dmg)  
+              *Recommended for M1, M2, M3, M4 Macs (2020 or newer)*
+            - [**Download for Mac (Intel)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase-${{ github.event.inputs.version }}.dmg)  
+              *For older Macs (2019 or earlier)*
 
-            ---
-
-            ### Installation & Security Instructions for Mac
-
+            #### 2. Install & Security Instructions:
             Because ProCase is a free, student-developed open-source application and not distributed through the Apple Mac App Store, macOS Gatekeeper will show a security message on the first launch stating that *Apple could not verify ProCase* or that it is from an *unidentified developer*. This is standard Apple security behavior for non-App Store software.
 
-            #### Step-by-Step Mac Setup:
-            1. Download the **Mac (Apple Silicon)** installer above (or **Mac (Intel)** if your Mac was made in 2019 or earlier).
-            2. Double-click the downloaded `.dmg` file and drag the **ProCase** icon into your **Applications** folder.
-            3. Open your **Applications** folder and double-click **ProCase**.
-            4. If macOS blocks it with the alert *"Apple could not verify 'ProCase' is free of malware"*:
+            1. Double-click the downloaded `.dmg` file and drag the **ProCase** icon into your **Applications** folder.
+            2. Open your **Applications** folder and double-click **ProCase**.
+            3. If macOS blocks it with the alert *"Apple could not verify 'ProCase' is free of malware"*:
                - Click **Done** on the popup (do not move to trash).
                - Open **System Settings** ( Apple menu at top left) → **Privacy & Security**.
                - Scroll down toward the bottom of the page until you see:  
@@ -171,17 +158,32 @@ jobs:
 
             ---
 
-            ### Installation & Security Instructions for Windows
+            ### Windows Download & Setup
 
+            #### 1. Download for Windows:
+            - [**Download ProCase for Windows (.exe)**](https://github.com/ce2727/CasingAutomation/releases/download/v${{ github.event.inputs.version }}/ProCase%20Setup%20${{ github.event.inputs.version }}.exe)  
+              *Setup installer for Windows 10 & 11*
+
+            #### 2. Install & Security Instructions:
             Because ProCase is a free open-source application and does not use an expensive corporate code-signing certificate, Windows Defender SmartScreen may display an alert on first launch stating *"Windows protected your PC"*.
 
-            #### Step-by-Step Windows Setup:
-            1. Download the **Windows (.exe)** installer above.
-            2. Double-click the downloaded `ProCase Setup.exe` file.
-            3. If a blue **Windows protected your PC** (SmartScreen) popup appears:
+            1. Double-click the downloaded `ProCase Setup.exe` file.
+            2. If a blue **Windows protected your PC** (SmartScreen) popup appears:
                - Click the small blue text link that says **More info**.
                - A new button will appear: click **Run anyway**.
-            4. ProCase will finish installing and automatically launch!
+            3. ProCase will finish installing and automatically launch!
+
+            ---
+
+            ### Web Version (Casee Only)
+
+            - [**Launch Web Version**](https://casingautomation.vercel.app)
+
+            **Important Note on the Web Version:**  
+            The browser version is **not** the full application:
+            - **What it does:** Allows you to quickly join someone else's case session as a **Casee / Interviewee** in your browser without installing software.
+            - **What it cannot do:** You cannot give cases, access or manage a case library, build cases, or track casing history.
+            - **To give cases or manage your library:** You **must** download and install the desktop app for **Mac** or **Windows** above.
 
             ---
             *All individual build files and portable .zip archives are listed below under **Assets**.*
