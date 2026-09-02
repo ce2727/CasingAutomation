@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(xargs:*)",
+      "Bash(npm run build:*)",
+      "Bash(/usr/local/bin/npm run build)",
+      "Bash(/opt/homebrew/bin/npm run build)",
+      "Bash(PATH=\"/opt/homebrew/bin:/opt/homebrew/Cellar/node/25.6.1_1/bin:$PATH\" npm run build:*)",
+      "Bash(/opt/homebrew/bin/npx tsc --noEmit)",
+      "Bash(export PATH=\"/opt/homebrew/Cellar/node/25.6.1_1/bin:$PATH\")",
+      "Bash(node /Users/cemmel/Developer/CasingAutomation/node_modules/.bin/tsc:*)",
+      "Bash(defaults write:*)",
+      "Bash(node node_modules/.bin/tsc:*)",
+      "Bash(export PATH=\"/opt/homebrew/bin:/opt/homebrew/Cellar/node/25.6.1_1/bin:$PATH\")",
+      "Bash(PATH=\"/opt/homebrew/Cellar/node/25.6.1_1/bin:$PATH\" node /Users/cemmel/Developer/CasingAutomation/node_modules/.bin/tsc:*)",
+      "Bash(PATH=\"/opt/homebrew/Cellar/node/25.6.1_1/bin:$PATH\" npm run build:*)",
+      "Bash(PATH=\"/opt/homebrew/Cellar/node/25.6.1_1/bin:/opt/homebrew/bin:$PATH\" npm run build:*)",
+      "Bash(PATH=\"/opt/homebrew/Cellar/node/25.6.1_1/bin:/opt/homebrew/bin:$PATH\" /opt/homebrew/Cellar/node/25.6.1_1/bin/node /opt/homebrew/bin/vite:*)",
+      "Bash(PATH=\"/opt/homebrew/Cellar/node/25.6.1_1/bin:$PATH\" node:*)",
+      "Bash(find:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

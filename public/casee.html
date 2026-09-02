@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasingPro - Partner View</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f1f5f9; margin: 0; padding: 20px; color: #1e293b; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .card { background: white; padding: 2rem; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); text-align: center; }
+        input { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 1rem; box-sizing: border-box; font-size: 1rem; }
+        button { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .exhibit { background: white; padding: 1rem; border-radius: 12px; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .placeholder { background: #e2e8f0; height: 300px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-style: italic; margin-top: 10px; }
+        #status { font-size: 0.875rem; color: #64748b; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container" id="join-view">
+        <div class="card">
+            <h2>Join Casing Session</h2>
+            <p>Enter the Join ID from your partner's laptop.</p>
+            <input type="text" id="peer-id-input" placeholder="e.g. 123-456-789">
+            <button onclick="joinSession()">Join Case</button>
+            <div id="status">Ready to connect</div>
+        </div>
+    </div>
+
+    <div class="container" id="case-view" style="display: none;">
+        <h2 id="case-title">Case Exhibits</h2>
+        <div id="exhibits-list">
+            <div style="text-align: center; color: #64748b; margin-top: 40px;">
+                Waiting for the partner to reveal exhibits...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;
+        let conn = null;
+        const revealedPages = new Set();
+
+        function joinSession() {
+            const hostId = document.getElementById('peer-id-input').value.trim();
+            if (!hostId) return;
+
+            document.getElementById('status').innerText = 'Connecting...';
+            
+            peer = new Peer();
+            
+            peer.on('open', () => {
+                conn = peer.connect(hostId);
+                setupConnection();
+            });
+
+            peer.on('error', (err) => {
+                document.getElementById('status').innerText = 'Error: ' + err.type;
+            });
+        }
+
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('join-view').style.display = 'none';
+                document.getElementById('case-view').style.display = 'block';
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'SESSION_INIT') {
+                    document.getElementById('case-title').innerText = data.payload.metadata.title;
+                } else if (data.type === 'REVEAL_PAGE') {
+                    if (data.payload.isRevealed) {
+                        revealedPages.add(data.payload.pageNumber);
+                    } else {
+                        revealedPages.delete(data.payload.pageNumber);
+                    }
+                    renderExhibits();
+                }
+            });
+
+            conn.on('close', () => {
+                alert('Connection lost');
+                location.reload();
+            });
+        }
+
+        function renderExhibits() {
+            const list = document.getElementById('exhibits-list');
+            if (revealedPages.size === 0) {
+                list.innerHTML = '<div style="text-align: center; color: #64748b; margin-top: 40px;">Waiting for the partner to reveal exhibits...</div>';
+                return;
+            }
+
+            list.innerHTML = Array.from(revealedPages).sort((a,b) => a-b).map(p => `
+                <div class="exhibit">
+                    <h3>Exhibit ${p}</h3>
+                    <div class="placeholder">[ Exhibit Content - Page ${p} ]</div>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
