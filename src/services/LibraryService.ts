@@ -358,6 +358,77 @@ export const libraryService = {
     });
   },
 
+  async exportHistoryCsv(options: {
+    received: boolean;
+    observed: boolean;
+    gave: boolean;
+  }): Promise<string> {
+    const allHistory = await this.getAllHistory();
+    const filtered = allHistory.filter(h => {
+      if (h.outcome === 'completed' || (h.role === 'casee' && h.outcome !== 'observed')) {
+        return options.received;
+      }
+      if (h.outcome === 'observed') {
+        return options.observed;
+      }
+      if (h.outcome === 'given' || h.role === 'caser') {
+        return options.gave;
+      }
+      return false;
+    });
+
+    // Sort descending by date (most recent sessions first)
+    filtered.sort((a, b) => b.date - a.date);
+
+    const escape = (v: any) => {
+      if (v === null || v === undefined) return '""';
+      const str = String(v).trim();
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const header = [
+      'Date',
+      'Session Type',
+      'Case Title',
+      'Casebook / Source',
+      'Partner Name',
+      'Duration (Minutes)',
+      'Outcome',
+      'Rating',
+      'Notes'
+    ];
+
+    const rows = [header.join(',')];
+
+    for (const h of filtered) {
+      let sessionType = 'Received';
+      if (h.outcome === 'observed') sessionType = 'Observed';
+      else if (h.outcome === 'given' || h.role === 'caser') sessionType = 'Gave';
+
+      let outcomeText = 'Completed';
+      if (h.outcome === 'observed') outcomeText = 'Observed';
+      else if (h.outcome === 'given') outcomeText = 'Given';
+
+      const durationMinutes = h.durationSeconds ? Math.round((h.durationSeconds / 60) * 10) / 10 : 0;
+      const dateStr = new Date(h.date).toISOString().split('T')[0];
+      const ratingVal = h.rating || h.selfRating || '';
+
+      rows.push([
+        escape(dateStr),
+        escape(sessionType),
+        escape(h.caseTitle),
+        escape(h.casebook || ''),
+        escape(h.partnerName || ''),
+        durationMinutes,
+        escape(outcomeText),
+        ratingVal,
+        escape(h.notes || '')
+      ].join(','));
+    }
+
+    return rows.join('\n');
+  },
+
   async importFromCsv(csvText: string, pdfBlob: Blob, onProgress?: (msg: string) => void): Promise<ImportResult> {
     const replaced: string[] = [];
     let total = 0;

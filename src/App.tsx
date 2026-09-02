@@ -810,6 +810,34 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
   const [showManual, setShowManual] = useState(false);
   const [manual, setManual] = useState<Omit<HistoryEntry, 'id'>>(() => ({ ...BLANK_MANUAL, date: Date.now() }));
   const [manualMins, setManualMins] = useState('');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportReceived, setExportReceived] = useState(true);
+  const [exportObserved, setExportObserved] = useState(true);
+  const [exportGave, setExportGave] = useState(false);
+
+  const handleExportCsv = async () => {
+    try {
+      const csv = await libraryService.exportHistoryCsv({
+        received: exportReceived,
+        observed: exportObserved,
+        gave: exportGave,
+      });
+      const dateStr = new Date().toISOString().split('T')[0];
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ProCase_Session_History_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch (err) {
+      console.error('Failed to export history:', err);
+      alert('Failed to generate CSV export.');
+    }
+  };
 
   useEffect(() => {
     libraryService.getAllHistory().then(setEntries);
@@ -975,6 +1003,91 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
         </div>
       )}
 
+      {showExportModal && (
+        <div className="modal">
+          <div className="import-form" style={{ maxWidth: '440px', gap: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <FileSpreadsheet size={22} style={{ color: 'var(--primary)' }} />
+                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Export Session History</h2>
+              </div>
+              <button 
+                className="btn btn-ghost btn-sm" 
+                style={{ padding: '0.25rem', borderRadius: '50%' }} 
+                onClick={() => setShowExportModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="hint-xs" style={{ margin: 0, lineHeight: 1.5 }}>
+              Export your casing history to a CSV spreadsheet formatted for consulting club trackers and leadership reporting.
+            </p>
+
+            <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Filter Sessions to Export:
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.95rem' }}>
+                <input 
+                  type="checkbox" 
+                  checked={exportReceived} 
+                  onChange={e => setExportReceived(e.target.checked)} 
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <span style={{ fontWeight: 500 }}>Cases Received</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  ({entries.filter(e => e.outcome === 'completed' || (e.role === 'casee' && e.outcome !== 'observed')).length} recorded)
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.95rem' }}>
+                <input 
+                  type="checkbox" 
+                  checked={exportObserved} 
+                  onChange={e => setExportObserved(e.target.checked)} 
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <span style={{ fontWeight: 500 }}>Cases Observed</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  ({entries.filter(e => e.outcome === 'observed').length} recorded)
+                </span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontSize: '0.95rem' }}>
+                <input 
+                  type="checkbox" 
+                  checked={exportGave} 
+                  onChange={e => setExportGave(e.target.checked)} 
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                <span style={{ fontWeight: 500 }}>Cases Gave</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  ({entries.filter(e => e.outcome === 'given' || e.role === 'caser').length} recorded)
+                </span>
+              </label>
+            </div>
+
+            <div style={{ fontSize: '0.825rem', color: '#64748b', lineHeight: 1.5, background: '#f1f5f9', padding: '0.75rem', borderRadius: '0.5rem' }}>
+              <div style={{ fontWeight: 600, color: '#334155', marginBottom: '0.25rem' }}>Columns Included in CSV:</div>
+              Date, Session Type (Received / Observed / Gave), Case Title, Casebook, Partner Name, Duration (Mins), Outcome, Rating, Notes.
+            </div>
+
+            <div className="form-actions">
+              <button className="btn btn-ghost" onClick={() => setShowExportModal(false)}>Cancel</button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleExportCsv}
+                disabled={!exportReceived && !exportObserved && !exportGave}
+              >
+                <Download size={16} /> Download CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="session-top-bar">
         <div className="left-section" style={{ gap: '12px' }}>
           <div className="header-brand-group" onClick={onBack}>
@@ -988,6 +1101,14 @@ const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: Cas
         <div className="right-section" style={{ gap: '0.75rem' }}>
           <button className="btn btn-ghost btn-sm" style={{ color: '#ef4444' }} onClick={handleResetHistory}>
             <RotateCcw size={16} /> Reset History
+          </button>
+          <button 
+            className="btn btn-secondary btn-sm" 
+            style={{ width: 'auto', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '6px' }} 
+            onClick={() => setShowExportModal(true)}
+            title="Export session history to CSV"
+          >
+            <Download size={16} /> Export History
           </button>
           <button className="btn btn-primary btn-sm" style={{ width: 'auto', padding: '0.5rem 1.25rem' }} onClick={() => { setManual({ ...BLANK_MANUAL, date: Date.now() }); setManualMins(''); setShowManual(true); }}>
             <Plus size={16} /> Log Session
