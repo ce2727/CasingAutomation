@@ -17,7 +17,7 @@ export default defineConfig(() => {
           vite: {
             build: {
               rollupOptions: {
-                external: ['express', 'socket.io', 'localtunnel', 'http', 'path', 'url']
+                external: ['express', 'socket.io', 'localtunnel', 'http', 'path', 'url', 'fs']
               }
             }
           }
