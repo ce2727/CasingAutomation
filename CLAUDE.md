@@ -294,11 +294,12 @@ Two-phase component:
 
 ## Electron Integration
 
-- `electron/main.ts`: Creates 1200×800 BrowserWindow, no IPC
+- `electron/main.ts`: Creates 1200×800 BrowserWindow, no IPC; checks for newer GitHub releases on packaged startup and prompts user to download updates
 - Dev: loads from Vite dev server URL (`process.env.VITE_DEV_SERVER_URL`)
 - Prod: loads `dist/index.html`
 - `nodeIntegration: true`, `contextIsolation: false` — app is browser-based
 - Electron presence detected via `navigator.userAgent` check for `/electron/i`
+- Release & deploy: `.github/workflows/release.yml` manually builds Mac/Win packages and deploys web app to Vercel
 
 ---
 

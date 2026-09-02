@@ -1,0 +1,141 @@
+name: Release & Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.1)'
+        required: true
+        default: '1.0.1'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-vercel:
+    name: Deploy to Vercel (Web)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Vercel Production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_5tpggNPZ9g6atDokAW1p6Gog
+          VERCEL_PROJECT_ID: prj_OPOfg4kEEGENTSiNpxt2vjzmxc1S
+        run: |
+          if [ -n "$VERCEL_TOKEN" ]; then
+            echo "Deploying to Vercel production..."
+            npx vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+          else
+            echo "Notice: VERCEL_TOKEN secret not configured in GitHub repository. Skipping Vercel deploy."
+          fi
+
+  build-mac:
+    name: Build macOS Packages
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Web & Electron
+        run: npm run build
+
+      - name: Package macOS (.dmg, .zip)
+        run: npx electron-builder --mac
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-packages
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows Packages
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Web & Electron
+        run: npm run build
+
+      - name: Package Windows (.exe, .zip)
+        run: npx electron-builder --win
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: |
+            release/*.exe
+            release/*.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release with Downloads
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: ProCase v${{ github.event.inputs.version }}
+          body: |
+            ### ProCase v${{ github.event.inputs.version }}
+
+            #### Desktop Downloads:
+            - **macOS**: Download `.dmg` (drag and drop to Applications) or `.zip`
+            - **Windows**: Download `.exe` (installer) or `.zip` (portable)
+
+            #### Web Version:
+            - Live at [casingautomation.vercel.app](https://casingautomation.vercel.app)
+          files: |
+            release-artifacts/*.dmg
+            release-artifacts/*.exe
+            release-artifacts/*.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
