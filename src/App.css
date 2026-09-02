@@ -50,6 +50,106 @@ h1, h2, h3, h4 { color: #0f172a; margin: 0; }
 .bg-blue { background: var(--primary); }
 .bg-green { background: var(--secondary); }
 
+/* Main Menu History Bar */
+.main-menu-history-bar {
+  width: 100%;
+  max-width: 800px;
+  margin-top: 1.5rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.main-menu-history-bar.single-card {
+  max-width: 400px;
+}
+
+.main-menu-history-bar:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07);
+  transform: translateY(-2px);
+}
+
+.main-menu-history-bar:active {
+  transform: translateY(0);
+}
+
+.history-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.history-bar-icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 0.75rem;
+  background: #f1f5f9;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.main-menu-history-bar:hover .history-bar-icon-wrap {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.history-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-bar-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.history-bar-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.history-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.main-menu-history-bar:hover .history-bar-right {
+  color: #0f172a;
+}
+
+.history-bar-arrow {
+  transition: transform 0.2s ease;
+}
+
+.main-menu-history-bar:hover .history-bar-arrow {
+  transform: translateX(3px);
+}
+
 /* Dashboard */
 .dashboard-container { padding: 3rem; max-width: 1200px; margin: 0 auto; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; }

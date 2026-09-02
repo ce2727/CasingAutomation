@@ -44,11 +44,12 @@ const getTypeColorClass = (type: string) => {
 
 const LandingPage: React.FC<{
   onRoleSelect: (role: 'caser' | 'casee') => void,
+  onHistoryClick: () => void,
   joinId: string,
   setJoinId: (id: string) => void,
   userName: string,
   onSettingsClick: () => void
-}> = ({ onRoleSelect, joinId, setJoinId, userName, onSettingsClick }) => {
+}> = ({ onRoleSelect, onHistoryClick, joinId, setJoinId, userName, onSettingsClick }) => {
   const [error, setError] = useState<string | null>(null);
 
   const validateId = (id: string) => {
@@ -103,6 +104,25 @@ const LandingPage: React.FC<{
           </div>
         </div>
       </div>
+
+      <button 
+        className={`main-menu-history-bar ${!isElectron ? 'single-card' : ''}`}
+        onClick={onHistoryClick}
+      >
+        <div className="history-bar-left">
+          <div className="history-bar-icon-wrap">
+            <History size={20} />
+          </div>
+          <div className="history-bar-text">
+            <span className="history-bar-title">Case History</span>
+            <span className="history-bar-desc">View past practice sessions, notes, and performance</span>
+          </div>
+        </div>
+        <div className="history-bar-right">
+          <span>Open</span>
+          <ChevronRight size={18} className="history-bar-arrow" />
+        </div>
+      </button>
     </div>
   );
 };
@@ -783,7 +803,7 @@ const BLANK_MANUAL: Omit<HistoryEntry, 'id'> = {
   outcome: 'given',
 };
 
-const HistoryPage: React.FC<{ onBack: () => void, cases: CasePackage[], onHistoryReset?: () => void }> = ({ onBack, cases, onHistoryReset }) => {
+const HistoryPage: React.FC<{ onBack: () => void, backLabel?: string, cases: CasePackage[], onHistoryReset?: () => void }> = ({ onBack, backLabel = 'Library', cases, onHistoryReset }) => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [roleFilter, setRoleFilter] = useState<'all' | 'caser' | 'casee'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -962,7 +982,7 @@ const HistoryPage: React.FC<{ onBack: () => void, cases: CasePackage[], onHistor
             <h2 className="brand-name">ProCase</h2>
           </div>
           <div className="header-divider" />
-          <button className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={18} /> Library</button>
+          <button className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={18} /> {backLabel}</button>
         </div>
         <div className="center-section"><h2 className="case-name">Case History</h2></div>
         <div className="right-section" style={{ gap: '0.75rem' }}>
@@ -1687,6 +1707,7 @@ const BulkCsvImporter: React.FC<{
 function App() {
   const [role, setRole] = useState<'caser' | 'casee' | null>(null);
   const [view, setView] = useState<'library' | 'history' | 'build-hub' | 'bulk-csv'>('library');
+  const [historyOrigin, setHistoryOrigin] = useState<'main-menu' | 'library'>('library');
   const [activeCase, setActiveCase] = useState<CasePackage | null>(null);
   const [cases, setCases] = useState<CasePackage[]>([]);
   const [slicingSource, setSlicingSource] = useState<Blob | null>(null);
@@ -1844,6 +1865,11 @@ function App() {
     <>
       <LandingPage 
         onRoleSelect={setRole} 
+        onHistoryClick={() => {
+          setHistoryOrigin('main-menu');
+          setRole('caser');
+          setView('history');
+        }}
         joinId={joinId} 
         setJoinId={setJoinId} 
         userName={userName}
@@ -1919,7 +1945,13 @@ function App() {
 
   if (view === 'history') return (
     <HistoryPage 
-      onBack={() => setView('library')} 
+      onBack={() => {
+        if (historyOrigin === 'main-menu') {
+          setRole(null);
+        }
+        setView('library');
+      }} 
+      backLabel={historyOrigin === 'main-menu' ? 'Menu' : 'Library'}
       cases={cases} 
       onHistoryReset={async () => {
         const all = await libraryService.getAllCases();
@@ -2007,7 +2039,7 @@ function App() {
         </div>
         <div className="center-section"><h2 className="case-name">Case Library</h2></div>
         <div className="right-section" style={{ gap: '0.75rem' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setView('history')} style={{ padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setHistoryOrigin('library'); setView('history'); }} style={{ padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <History size={18} /> <span style={{ fontWeight: 600 }}>View History</span>
           </button>
           <button
