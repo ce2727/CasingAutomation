@@ -1,9 +1,9 @@
-import { BrowserWindow as e, app as t, dialog as n, shell as r } from "electron";
-import i from "path";
-import a from "fs";
-import { fileURLToPath as o } from "url";
-var s = i.dirname(o(import.meta.url)), c = null;
-function l(e, t) {
+import { BrowserWindow as e, Menu as t, app as n, dialog as r, ipcMain as i, shell as a } from "electron";
+import o from "path";
+import s from "fs";
+import { fileURLToPath as c } from "url";
+var l = o.dirname(c(import.meta.url)), u = null;
+function d(e, t) {
 	let n = e.replace(/^v/, "").split(".").map((e) => parseInt(e, 10) || 0), r = t.replace(/^v/, "").split(".").map((e) => parseInt(e, 10) || 0);
 	for (let e = 0; e < Math.max(n.length, r.length); e++) {
 		let t = n[e] || 0, i = r[e] || 0;
@@ -12,7 +12,7 @@ function l(e, t) {
 	}
 	return !1;
 }
-function u(e = []) {
+function f(e = []) {
 	if (process.platform === "win32") {
 		let t = e.find((e) => e.name.toLowerCase().endsWith(".exe"));
 		return t ? {
@@ -32,35 +32,64 @@ function u(e = []) {
 		url: `https://github.com/ce2727/CasingAutomation/releases/latest/download/ProCase-macOS-${t ? "arm64" : "x64"}.dmg`
 	};
 }
-async function d() {
-	if (!(process.env.VITE_DEV_SERVER_URL || !t.isPackaged)) try {
-		let e = t.getVersion(), o = await fetch("https://api.github.com/repos/ce2727/CasingAutomation/releases/latest", { headers: { "User-Agent": "ProCase-Desktop-App" } });
-		if (!o.ok) return;
-		let s = await o.json(), d = (s.tag_name || "").replace(/^v/, "").trim();
-		if (d && l(e, d) && c) {
-			let o = u(s.assets), l = process.platform === "win32";
-			if ((await n.showMessageBox(c, {
+async function p(e = !1) {
+	if (process.env.VITE_DEV_SERVER_URL || !n.isPackaged) {
+		e && u && r.showMessageBox(u, {
+			type: "info",
+			title: "Check for Updates",
+			message: "Running in development mode",
+			detail: "Auto-update is only active when running a packaged application.",
+			buttons: ["OK"]
+		});
+		return;
+	}
+	try {
+		let t = n.getVersion(), i = await fetch("https://api.github.com/repos/ce2727/CasingAutomation/releases/latest", { headers: { "User-Agent": "ProCase-Desktop-App" } });
+		if (!i.ok) {
+			e && u && r.showMessageBox(u, {
+				type: "warning",
+				title: "Update Check Failed",
+				message: `Unable to check for updates (Status ${i.status}).`,
+				detail: i.status === 403 ? "GitHub API rate limit reached. Please try again in a few minutes or check GitHub releases directly." : "Could not fetch release information from GitHub.",
+				buttons: ["OK"]
+			});
+			return;
+		}
+		let c = await i.json(), l = (c.tag_name || "").replace(/^v/, "").trim();
+		if (!l || !d(t, l)) {
+			e && u && r.showMessageBox(u, {
+				type: "info",
+				title: "You're Up to Date",
+				message: `ProCase v${t} is the latest version.`,
+				detail: "There are no newer updates available at this time.",
+				buttons: ["OK"]
+			});
+			return;
+		}
+		if (l && d(t, l) && u) {
+			let e = f(c.assets), i = process.platform === "win32";
+			if ((await r.showMessageBox(u, {
 				type: "info",
 				title: "Update Available",
-				message: `A new version of ProCase is available: v${d}`,
-				detail: `You are currently running v${e}.\n\nWould you like to download and install the update now?`,
+				message: `A new version of ProCase is available: v${l}`,
+				detail: `You are currently running v${t}.\n\nWould you like to download and install the update now?`,
 				buttons: ["Update Now", "Later"],
 				defaultId: 0,
 				cancelId: 1
 			})).response !== 0) return;
-			n.showMessageBox(c, {
+			r.showMessageBox(u, {
 				type: "info",
 				title: "Downloading Update",
-				message: `Downloading ProCase v${d}...`,
-				detail: l ? "The installer is downloading in the background and will launch automatically when ready." : "The disk image is downloading and will open automatically in Finder when ready.",
+				message: `Downloading ProCase v${l}...`,
+				detail: i ? "The installer is downloading in the background and will launch automatically when ready." : "The disk image is downloading and will open automatically in Finder when ready.",
 				buttons: ["OK"]
 			});
 			try {
-				let e = i.join(t.getPath("temp"), o.name), s = await fetch(o.url, { headers: { "User-Agent": "ProCase-Desktop-App" } });
-				if (!s.ok || !s.body) throw Error(`Download failed with status ${s.status}`);
-				let u = s.body.getReader(), f = a.createWriteStream(e);
+				let t = o.join(n.getPath("temp"), e.name), c = await fetch(e.url, { headers: { "User-Agent": "ProCase-Desktop-App" } });
+				if (!c.ok || !c.body) throw Error(`Download failed with status ${c.status}`);
+				let d = c.body.getReader(), f = s.createWriteStream(t);
 				for (;;) {
-					let { done: e, value: t } = await u.read();
+					let { done: e, value: t } = await d.read();
 					if (e) break;
 					t && f.write(Buffer.from(t));
 				}
@@ -68,17 +97,17 @@ async function d() {
 					f.end((n) => {
 						n ? t(n) : e(!0);
 					});
-				}), l ? (await r.openPath(e), setTimeout(() => {
-					t.quit();
-				}, 1500)) : (await r.openPath(e), c && n.showMessageBox(c, {
+				}), i ? (await a.openPath(t), setTimeout(() => {
+					n.quit();
+				}, 1500)) : (await a.openPath(t), u && r.showMessageBox(u, {
 					type: "info",
 					title: "Update Ready",
-					message: `ProCase v${d} downloaded!`,
+					message: `ProCase v${l} downloaded!`,
 					detail: "The installer disk image has been opened. Drag ProCase to Applications to complete the update.",
 					buttons: ["OK"]
 				}));
-			} catch (e) {
-				console.error("Download update error:", e), c && (await n.showMessageBox(c, {
+			} catch (t) {
+				console.error("Download update error:", t), u && (await r.showMessageBox(u, {
 					type: "error",
 					title: "Download Failed",
 					message: "Could not download the update automatically.",
@@ -86,20 +115,20 @@ async function d() {
 					buttons: ["Open Browser", "Cancel"],
 					defaultId: 0,
 					cancelId: 1
-				})).response === 0 && r.openExternal(o.url || s.html_url || "https://github.com/ce2727/CasingAutomation/releases/latest");
+				})).response === 0 && a.openExternal(e.url || c.html_url || "https://github.com/ce2727/CasingAutomation/releases/latest");
 			}
 		}
 	} catch (e) {
 		console.warn("Update check error:", e);
 	}
 }
-function f() {
-	let r = !!process.env.VITE_DEV_SERVER_URL;
-	if (process.platform === "darwin" && t.dock) try {
-		let e = r ? i.join(process.cwd(), "public/desktop-icon.png") : i.join(s, "../dist/desktop-icon.png");
-		t.dock.setIcon(e);
+function m() {
+	let t = !!process.env.VITE_DEV_SERVER_URL;
+	if (process.platform === "darwin" && n.dock) try {
+		let e = t ? o.join(process.cwd(), "public/desktop-icon.png") : o.join(l, "../dist/desktop-icon.png");
+		n.dock.setIcon(e);
 	} catch {}
-	if (c = new e({
+	if (u = new e({
 		width: 1200,
 		height: 800,
 		title: "ProCase",
@@ -108,22 +137,104 @@ function f() {
 			nodeIntegration: !0,
 			contextIsolation: !1
 		}
-	}), c.once("ready-to-show", () => {
-		c?.show(), c?.focus();
-	}), c.on("closed", () => {
-		c = null;
-	}), process.env.VITE_DEV_SERVER_URL) c.loadURL(process.env.VITE_DEV_SERVER_URL);
+	}), u.once("ready-to-show", () => {
+		u?.show(), u?.focus();
+	}), u.on("closed", () => {
+		u = null;
+	}), process.env.VITE_DEV_SERVER_URL) u.loadURL(process.env.VITE_DEV_SERVER_URL);
 	else {
-		let e = i.join(s, "../dist/index.html");
-		c.loadFile(e).catch((e) => {
-			console.error("Failed to load index.html:", e), n.showErrorBox("Launch Error", `Could not load app interface: ${e.message}`);
+		let e = o.join(l, "../dist/index.html");
+		u.loadFile(e).catch((e) => {
+			console.error("Failed to load index.html:", e), r.showErrorBox("Launch Error", `Could not load app interface: ${e.message}`);
 		});
 	}
 }
-t.whenReady().then(() => {
-	f(), setTimeout(d, 3e3);
-}), t.on("activate", () => {
-	e.getAllWindows().length === 0 && f();
-}), t.on("window-all-closed", () => {
-	process.platform !== "darwin" && t.quit();
+function h() {
+	let e = process.platform === "darwin", r = [
+		...e ? [{
+			label: n.name,
+			submenu: [
+				{ role: "about" },
+				{
+					label: "Check for Updates...",
+					click: () => p(!0)
+				},
+				{ type: "separator" },
+				{ role: "services" },
+				{ type: "separator" },
+				{ role: "hide" },
+				{ role: "hideOthers" },
+				{ role: "unhide" },
+				{ type: "separator" },
+				{ role: "quit" }
+			]
+		}] : [],
+		{
+			label: "File",
+			submenu: [e ? { role: "close" } : { role: "quit" }]
+		},
+		{
+			label: "Edit",
+			submenu: [
+				{ role: "undo" },
+				{ role: "redo" },
+				{ type: "separator" },
+				{ role: "cut" },
+				{ role: "copy" },
+				{ role: "paste" },
+				{ role: "selectAll" }
+			]
+		},
+		{
+			label: "View",
+			submenu: [
+				{ role: "reload" },
+				{ role: "forceReload" },
+				{ type: "separator" },
+				{ role: "togglefullscreen" }
+			]
+		},
+		{
+			label: "Window",
+			submenu: [
+				{ role: "minimize" },
+				{ role: "zoom" },
+				...e ? [
+					{ type: "separator" },
+					{ role: "front" },
+					{ type: "separator" },
+					{ role: "window" }
+				] : [{ role: "close" }]
+			]
+		},
+		{
+			role: "help",
+			submenu: [
+				...e ? [] : [{
+					label: "Check for Updates...",
+					click: () => p(!0)
+				}, { type: "separator" }],
+				{
+					label: "ProCase GitHub Repository",
+					click: async () => {
+						await a.openExternal("https://github.com/ce2727/CasingAutomation");
+					}
+				},
+				{
+					label: "View Latest Releases",
+					click: async () => {
+						await a.openExternal("https://github.com/ce2727/CasingAutomation/releases/latest");
+					}
+				}
+			]
+		}
+	], i = t.buildFromTemplate(r);
+	t.setApplicationMenu(i);
+}
+n.whenReady().then(() => {
+	h(), i.handle("check-for-updates", () => p(!0)), m(), setTimeout(() => p(!1), 3e3);
+}), n.on("activate", () => {
+	e.getAllWindows().length === 0 && m();
+}), n.on("window-all-closed", () => {
+	process.platform !== "darwin" && n.quit();
 });

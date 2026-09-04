@@ -1155,6 +1155,9 @@ h1, h2, h3, h4 { color: #0f172a; margin: 0; }
 }
 
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-spin {
+  animation: spin 1s linear infinite !important;
+}
 
 /* Modal Styles */
 .modal {
@@ -2085,6 +2088,17 @@ textarea:focus {
 
 .connection-step-row.active .step-badge {
   background: #2563eb;
+  color: white;
+}
+
+.connection-step-row.failed {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.connection-step-row.failed .step-badge {
+  background: #ef4444;
   color: white;
 }
 

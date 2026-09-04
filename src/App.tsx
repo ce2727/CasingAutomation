@@ -612,6 +612,51 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
   );
 };
 
+// --- Step Failure Diagnostic Info ---
+const getStepFailureInfo = (step: number, code: string) => {
+  switch (step) {
+    case 1:
+      return {
+        title: 'Signaling Network Unreachable',
+        desc: 'Could not connect to the peer session coordinator server.',
+        tips: [
+          'Verify that your internet connection is active.',
+          'Check if a firewall, ad blocker, or strict network filter is blocking WebSockets.',
+        ],
+      };
+    case 2:
+      return {
+        title: 'Partner Session Not Found',
+        desc: `Could not find an active host session with room code "${code}".`,
+        tips: [
+          'Verify that your partner has already started hosting and has the session open.',
+          'Double check that the 5-character room code was entered correctly.',
+        ],
+      };
+    case 3:
+      return {
+        title: 'Network Route Discovery Timed Out (NAT / Firewall)',
+        desc: "Your computer and your partner's computer couldn't agree on a direct network route through your local routers. Restrictive Wi-Fi (Symmetric NAT, campus/dorm network, office, or 5G cellular home internet) blocks STUN candidate traversal.",
+        tips: [
+          'Switch your Wi-Fi to a mobile phone hotspot.',
+          'Connect to your school or corporate VPN (or disconnect from it if already active).',
+          'Have your partner host from a standard home Wi-Fi network or hotspot.',
+          'Click the button below to retry candidate exchange.',
+        ],
+      };
+    case 4:
+    default:
+      return {
+        title: 'Peer-to-Peer Tunnel Blocked',
+        desc: 'Direct WebRTC DataChannel connection could not be opened across your local routers.',
+        tips: [
+          'Switch to a mobile phone hotspot or toggle your VPN.',
+          'Restart your browser or app and try again.',
+        ],
+      };
+  }
+};
+
 // --- Casee Session ---
 const CaseeSession: React.FC<{
   initialJoinId: string;
@@ -647,6 +692,10 @@ const CaseeSession: React.FC<{
   const joinIdRef = useRef(initialJoinId);
   const wakeLockRef = useRef<any>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const statusRef = useRef<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const connectionTimeoutRef = useRef<any>(null);
+  const lastActiveStepRef = useRef<number>(1);
 
   const handleSaveCaseeName = (name: string) => {
     const trimmed = name.trim();
@@ -700,32 +749,64 @@ const CaseeSession: React.FC<{
     };
   }, [status]);
 
-  useEffect(() => {
+  const handleDetailedStateChange = (state: DetailedConnectionState) => {
+    setDetailedState(state);
+    if (state === 'connecting_signaling') lastActiveStepRef.current = 1;
+    else if (state === 'signaling_ready') lastActiveStepRef.current = 2;
+    else if (state === 'discovering_route') lastActiveStepRef.current = 3;
+    else if (state === 'connecting_peer') lastActiveStepRef.current = 4;
+  };
+
+  const startConnection = (code: string) => {
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+    lastActiveStepRef.current = 1;
+    setDisconnectReason(null);
+    setStatus('connecting');
+    statusRef.current = 'connecting';
+    setErrorMessage('');
+
     peerService.init();
-    peerService.onDetailedStateChange(setDetailedState);
+    peerService.onDetailedStateChange(handleDetailedStateChange);
     peerService.onPingChange(setPingMs);
 
-    const timeout = setTimeout(() => {
-      if (status !== 'connected') { setStatus('error'); setErrorMessage('Connection timed out. Ensure your partner has started their session.'); }
+    connectionTimeoutRef.current = setTimeout(() => {
+      if (statusRef.current !== 'connected' && !hasExitedRef.current) {
+        setStatus('error');
+        statusRef.current = 'error';
+        setErrorMessage('timeout');
+      }
     }, 20000);
 
     peerService.onConnectionCountChange(count => {
       if (hasExitedRef.current) return;
       if (count > 0) {
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+        }
         setStatus('connected');
-        clearTimeout(timeout);
+        statusRef.current = 'connected';
         if (caseeNameRef.current) {
           peerService.send('PEER_INFO', { name: caseeNameRef.current });
         }
       } else {
         setStatus('idle');
+        statusRef.current = 'idle';
       }
     });
 
     peerService.onError(err => {
+      if (hasExitedRef.current) return;
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
       setStatus('error');
+      statusRef.current = 'error';
       setErrorMessage(err);
-      clearTimeout(timeout);
     });
 
     peerService.onMessage(msg => {
@@ -750,23 +831,33 @@ const CaseeSession: React.FC<{
       }
     });
 
-    if (joinIdRef.current && !hasExitedRef.current) { setStatus('connecting'); peerService.join(joinIdRef.current); }
-    return () => { peerService.destroy(); clearTimeout(timeout); };
+    if (code && !hasExitedRef.current) {
+      peerService.join(code);
+    }
+  };
+
+  useEffect(() => {
+    startConnection(joinIdRef.current);
+    return () => {
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
+      peerService.destroy();
+    };
   }, []);
 
   const handleReconnect = () => {
-    setDisconnectReason(null);
-    setStatus('connecting');
-    setErrorMessage('');
-    peerService.init();
-    peerService.onDetailedStateChange(setDetailedState);
-    peerService.onPingChange(setPingMs);
-    peerService.join(joinIdRef.current);
+    startConnection(joinIdRef.current);
   };
 
   const handleExit = () => {
     if (hasExitedRef.current) return;
     hasExitedRef.current = true;
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
     window.history.replaceState({}, '', window.location.pathname);
     peerService.destroy();
     if (hadSessionRef.current && isElectron) {
@@ -778,6 +869,10 @@ const CaseeSession: React.FC<{
 
   const handleForceExit = () => {
     hasExitedRef.current = true;
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
     window.history.replaceState({}, '', window.location.pathname);
     peerService.destroy();
     onBack();
@@ -983,139 +1078,161 @@ const CaseeSession: React.FC<{
   }
 
   if (status !== 'connected' && !hasExitedRef.current) {
+    let failedStep = lastActiveStepRef.current;
+    if (errorMessage === 'peer-unavailable') {
+      failedStep = 2;
+    } else if (errorMessage === 'nat-firewall-blocked') {
+      failedStep = Math.max(3, lastActiveStepRef.current);
+    }
+
     const getStepState = (step: number) => {
-      if (detailedState === 'connecting_signaling') return step === 1 ? 'active' : 'pending';
-      if (detailedState === 'signaling_ready') return step < 2 ? 'completed' : step === 2 ? 'active' : 'pending';
-      if (detailedState === 'discovering_route') return step < 3 ? 'completed' : step === 3 ? 'active' : 'pending';
-      if (detailedState === 'connecting_peer') return step < 4 ? 'completed' : step === 4 ? 'active' : 'pending';
-      if (detailedState === 'connected') return 'completed';
+      if (status === 'error') {
+        if (step < failedStep) return 'completed';
+        if (step === failedStep) return 'failed';
+        return 'pending';
+      }
+      const currentStep = 
+        detailedState === 'connecting_signaling' ? 1 :
+        detailedState === 'signaling_ready' ? 2 :
+        detailedState === 'discovering_route' ? 3 :
+        detailedState === 'connecting_peer' ? 4 :
+        1;
+      if (step < currentStep) return 'completed';
+      if (step === currentStep) return 'active';
       return 'pending';
+    };
+
+    const getStepBadge = (step: number) => {
+      const state = getStepState(step);
+      if (state === 'completed') return '✓';
+      if (state === 'failed') return '✕';
+      if (state === 'active') return <Loader2 size={12} className="animate-spin" />;
+      return step;
     };
 
     return (
       <div className="landing-container">
         <div className="loader-container" style={{ width: '100%', maxWidth: '480px', textAlign: 'center' }}>
           {status === 'error' ? (
-            errorMessage === 'nat-firewall-blocked' ? (
-              <>
-                <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626', margin: '0 auto 1rem' }}>
-                  <ShieldAlert size={36} />
-                </div>
-                <h2 style={{ fontSize: '1.4rem', color: '#991b1b', marginBottom: '0.5rem' }}>
-                  Router Firewall Blocked Direct Link
-                </h2>
-                <div className="diagnostic-advice-box">
-                  <p>
-                    Your partner's Wi-Fi router or firewall (common with Symmetric NAT, campus, or 5G home internet) prevented establishing a direct peer-to-peer connection.
-                  </p>
-                  <strong>Suggested Workarounds:</strong>
-                  <ul>
-                    <li>Switch off Wi-Fi and connect via mobile phone hotspot.</li>
-                    <li>Connect to your school or work VPN.</li>
-                    <li>Have your partner host from a standard home Wi-Fi network.</li>
-                  </ul>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
-                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleExit}>
-                    Try Again
-                  </button>
-                  <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowDiagnostics(true)}>
-                    <Activity size={16} style={{ marginRight: '0.35rem' }} /> Diagnostics
-                  </button>
-                </div>
-              </>
-            ) : errorMessage === 'peer-unavailable' ? (
-              <>
-                <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626', margin: '0 auto 1rem' }}>
-                  <Info size={36} />
-                </div>
-                <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>Partner Session Not Found</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                  Could not locate session <strong>{joinIdRef.current}</strong>. Check the code or verify your partner has started their session.
-                </p>
-                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
-                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleExit}>
-                    Try Again
-                  </button>
-                  <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowDiagnostics(true)}>
-                    <Activity size={16} style={{ marginRight: '0.35rem' }} /> Diagnostics
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626', margin: '0 auto 1rem' }}>
-                  <Info size={36} />
-                </div>
-                <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>Connection Failed</h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                  {errorMessage}
-                </p>
-                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
-                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleExit}>
-                    Try Again
-                  </button>
-                  <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowDiagnostics(true)}>
-                    <Activity size={16} style={{ marginRight: '0.35rem' }} /> Diagnostics
-                  </button>
-                </div>
-              </>
-            )
+            <>
+              <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626', margin: '0 auto 1rem' }}>
+                <ShieldAlert size={36} />
+              </div>
+              <h2 style={{ fontSize: '1.35rem', color: '#991b1b', marginBottom: '0.25rem' }}>
+                Connection Stalled at Step {failedStep}
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+                Room Code: <strong style={{ letterSpacing: '0.05em' }}>{joinIdRef.current}</strong>
+              </p>
+            </>
           ) : (
             <>
               <Loader2 size={40} className="animate-spin" color="#2563eb" style={{ margin: '0 auto 1rem' }} />
               <h2 style={{ fontSize: '1.35rem', marginBottom: '0.25rem' }}>Connecting to Partner...</h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
                 Room Code: <strong style={{ letterSpacing: '0.05em' }}>{joinIdRef.current}</strong>
               </p>
-
-              <div className="connection-steps-container">
-                <div className={`connection-step-row ${getStepState(1)}`}>
-                  <div className="step-badge">{getStepState(1) === 'completed' ? '✓' : '1'}</div>
-                  <div className="step-info">
-                    <span className="step-title">Signaling Network</span>
-                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Connecting to session coordinator</span>
-                  </div>
-                </div>
-
-                <div className={`connection-step-row ${getStepState(2)}`}>
-                  <div className="step-badge">{getStepState(2) === 'completed' ? '✓' : '2'}</div>
-                  <div className="step-info">
-                    <span className="step-title">Locate Partner</span>
-                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Handshaking with host session</span>
-                  </div>
-                </div>
-
-                <div className={`connection-step-row ${getStepState(3)}`}>
-                  <div className="step-badge">{getStepState(3) === 'completed' ? '✓' : '3'}</div>
-                  <div className="step-info">
-                    <span className="step-title">Discover Network Route</span>
-                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>STUN public address & candidate exchange</span>
-                  </div>
-                </div>
-
-                <div className={`connection-step-row ${getStepState(4)}`}>
-                  <div className="step-badge">{getStepState(4) === 'completed' ? '✓' : '4'}</div>
-                  <div className="step-info">
-                    <span className="step-title">Peer-to-Peer Tunnel</span>
-                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Opening encrypted WebRTC DataChannel</span>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowDiagnostics(true)} style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  <Activity size={14} style={{ marginRight: '0.35rem' }} /> Live Diagnostics
-                </button>
-                <button className="btn btn-ghost btn-sm" onClick={handleForceExit} style={{ fontSize: '0.8rem' }}>
-                  Cancel
-                </button>
-              </div>
             </>
           )}
-          <button className="btn btn-ghost" style={{ marginTop: '1.25rem' }} onClick={handleForceExit}>
-            Back to Home
-          </button>
+
+          <div className="connection-steps-container">
+            <div className={`connection-step-row ${getStepState(1)}`}>
+              <div className="step-badge">{getStepBadge(1)}</div>
+              <div className="step-info">
+                <span className="step-title">Signaling Network</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Connecting to session coordinator</span>
+              </div>
+            </div>
+
+            <div className={`connection-step-row ${getStepState(2)}`}>
+              <div className="step-badge">{getStepBadge(2)}</div>
+              <div className="step-info">
+                <span className="step-title">Locate Partner</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Handshaking with host session</span>
+              </div>
+            </div>
+
+            <div className={`connection-step-row ${getStepState(3)}`}>
+              <div className="step-badge">{getStepBadge(3)}</div>
+              <div className="step-info">
+                <span className="step-title">Discover Network Route</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>STUN public address & candidate exchange</span>
+              </div>
+            </div>
+
+            <div className={`connection-step-row ${getStepState(4)}`}>
+              <div className="step-badge">{getStepBadge(4)}</div>
+              <div className="step-info">
+                <span className="step-title">Peer-to-Peer Tunnel</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Opening encrypted WebRTC DataChannel</span>
+              </div>
+            </div>
+          </div>
+
+          {status === 'error' ? (
+            <>
+              {(() => {
+                const info = getStepFailureInfo(failedStep, joinIdRef.current);
+                return (
+                  <div className="diagnostic-advice-box" style={{ marginTop: '1.25rem', marginBottom: '1rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.35rem' }}>
+                      {info.title}
+                    </div>
+                    <p style={{ margin: '0 0 0.5rem 0' }}>{info.desc}</p>
+                    <strong>Troubleshooting Tips:</strong>
+                    <ul>
+                      {info.tips.map((tip, idx) => (
+                        <li key={idx}>{tip}</li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', marginTop: '0.25rem' }}>
+                <button
+                  className="btn btn-primary"
+                  style={{ width: '100%', justifyContent: 'center', padding: '0.85rem' }}
+                  onClick={handleReconnect}
+                >
+                  <RotateCcw size={16} style={{ marginRight: '0.4rem' }} /> Try Code "{joinIdRef.current}" Again
+                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={() => setShowDiagnostics(true)}
+                  >
+                    <Activity size={15} style={{ marginRight: '0.35rem' }} /> Diagnostics
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={handleForceExit}
+                  >
+                    Back to Home
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '1.25rem' }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowDiagnostics(true)}
+                style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}
+              >
+                <Activity size={14} style={{ marginRight: '0.35rem' }} /> Live Diagnostics
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleForceExit}
+                style={{ fontSize: '0.8rem' }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
         <NetworkDiagnosticsModal isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
       </div>
