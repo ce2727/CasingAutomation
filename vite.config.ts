@@ -28,6 +28,7 @@ export default defineConfig(() => {
     build: {
       // Ensure build terminates and doesn't watch
       watch: null,
-    }
+    },
+    envPrefix: ['VITE_', 'METERED_'],
   }
 })

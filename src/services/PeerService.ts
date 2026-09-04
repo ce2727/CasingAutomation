@@ -123,8 +123,8 @@ export class PeerService {
     this.logEvent('signaling', id ? `Initializing peer with requested ID: ${id}` : 'Initializing peer with random ID');
 
     try {
-      const meteredUser = (import.meta.env.VITE_METERED_USERNAME as string | undefined)?.trim();
-      const meteredCred = (import.meta.env.VITE_METERED_CREDENTIAL as string | undefined)?.trim();
+      const meteredUser = ((import.meta.env.METERED_USERNAME || import.meta.env.VITE_METERED_USERNAME) as string | undefined)?.trim();
+      const meteredCred = ((import.meta.env.METERED_CREDENTIAL || import.meta.env.VITE_METERED_CREDENTIAL) as string | undefined)?.trim();
 
       const iceServers: RTCIceServer[] = [
         { urls: 'stun:stun.l.google.com:19302' },
