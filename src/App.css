@@ -1855,18 +1855,15 @@ textarea:focus {
 }
 
 .connection-peer-item.waiting {
-  cursor: default;
+  cursor: pointer;
   background: #f8fafc;
   border-color: #e2e8f0;
-  color: #94a3b8;
-  justify-content: flex-start;
-  gap: 0.5rem;
 }
 
 .connection-peer-item.waiting:hover {
-  transform: none;
-  background: #f8fafc;
-  border-color: #e2e8f0;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
 }
 
 .peer-item-left {
@@ -1901,9 +1898,40 @@ textarea:focus {
   flex-shrink: 0;
 }
 
-/* --- Network Health Pill & Diagnostics --- */
+/* --- Copy Invite Link Pill --- */
 
-.connection-health-pill {
+.btn-copy-invite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.btn-copy-invite:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.btn-copy-invite.copied {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
+/* --- Network Health Pill & Peer Status Pill --- */
+
+.connection-health-pill,
+.peer-status-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -1912,11 +1940,15 @@ textarea:focus {
   font-size: 0.7rem;
   font-weight: 500;
   border: 1px solid #e2e8f0;
-  cursor: pointer;
   background: #f8fafc;
   color: #64748b;
   transition: all 0.15s ease;
   font-family: inherit;
+  flex-shrink: 0;
+}
+
+.connection-health-pill {
+  cursor: pointer;
 }
 
 .connection-health-pill:hover {
@@ -1925,7 +1957,8 @@ textarea:focus {
   color: #334155;
 }
 
-.connection-health-pill.healthy {
+.connection-health-pill.healthy,
+.peer-status-pill.healthy {
   background: #f8fafc;
   border-color: #e2e8f0;
   color: #64748b;
@@ -1937,28 +1970,32 @@ textarea:focus {
   color: #334155;
 }
 
-.connection-health-pill.warning {
+.connection-health-pill.warning,
+.peer-status-pill.warning {
   background: #fefce8;
   border-color: #fef08a;
   color: #854d0e;
 }
 
-.connection-health-pill.danger {
+.connection-health-pill.danger,
+.peer-status-pill.danger {
   background: #fff7ed;
   border-color: #fed7aa;
   color: #9a3412;
 }
 
-.connection-health-pill.failed {
+.connection-health-pill.failed,
+.peer-status-pill.failed {
   background: #fef2f2;
   border-color: #fecaca;
   color: #991b1b;
 }
 
-.connection-health-pill.waiting {
+.connection-health-pill.waiting,
+.peer-status-pill.waiting {
   background: #f1f5f9;
   border-color: #e2e8f0;
-  color: #475569;
+  color: #64748b;
 }
 
 .health-dot {

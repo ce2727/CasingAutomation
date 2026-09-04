@@ -636,27 +636,14 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                   {peerId || '...'}
                 </div>
               </div>
-              <ConnectionHealthPill
-                count={connectionCount}
-                detailedState={detailedState}
-                pingMs={pingMs}
-                onClick={() => {
-                  setDiagnosticsPeerId(undefined);
-                  setShowDiagnostics(true);
-                }}
-              />
-            </div>
-            <div className="url-box-sm" style={{ marginTop: '0' }}>
-              <span style={{ fontSize: '0.65rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
-                {peerId ? `${VERCEL_URL}/?id=${peerId}` : 'Generating...'}
-              </span>
               <button
-                className="btn-icon-mini"
+                type="button"
+                className={`btn-copy-invite ${copied ? 'copied' : ''}`}
                 onClick={copyInviteLink}
-                title="Copy Link"
-                style={{ marginLeft: '0.5rem', color: copied ? '#10b981' : '#94a3b8' }}
+                title="Copy invite URL to clipboard"
               >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? <Check size={13} color="#166534" /> : <Copy size={13} />}
+                <span>{copied ? 'Copied Link' : 'Copy Link'}</span>
               </button>
             </div>
             <div className="connection-peers-list">
@@ -669,17 +656,48 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                   }}
                   title="Click to view network diagnostics"
                 >
-                  <span className="peer-status-dot" style={{ backgroundColor: '#cbd5e1' }} />
-                  <span style={{ fontSize: '0.75rem' }}>Waiting for partner...</span>
+                  <span className="peer-item-name" style={{ color: '#64748b', fontWeight: 500 }}>
+                    Waiting for peers...
+                  </span>
+                  <span className="peer-status-pill waiting">
+                    <span className="health-dot" style={{ backgroundColor: '#94a3b8' }} />
+                    <span>Waiting</span>
+                  </span>
                 </div>
               ) : (
                 peersToRender.map((p) => {
                   const peerName = activePeersMapRef.current.get(p.peerId) || (p.name && p.name !== 'Partner' ? p.name : (peerCaseeName || p.name || 'Partner'));
-                  const dotColor = p.detailedState === 'connected'
-                    ? (p.pingMs !== null ? (p.pingMs < 150 ? '#22c55e' : p.pingMs < 400 ? '#eab308' : '#f97316') : '#22c55e')
-                    : p.detailedState === 'reconnecting' ? '#f97316'
-                    : p.detailedState === 'failed' ? '#ef4444'
-                    : '#eab308';
+                  let badgeClass = 'waiting';
+                  let dotColor = '#eab308';
+                  let label = 'Connecting';
+
+                  if (p.detailedState === 'connected') {
+                    if (p.pingMs !== null) {
+                      label = `${p.pingMs}ms`;
+                      if (p.pingMs < 150) {
+                        badgeClass = 'healthy';
+                        dotColor = '#22c55e';
+                      } else if (p.pingMs < 400) {
+                        badgeClass = 'warning';
+                        dotColor = '#eab308';
+                      } else {
+                        badgeClass = 'danger';
+                        dotColor = '#f97316';
+                      }
+                    } else {
+                      badgeClass = 'healthy';
+                      dotColor = '#22c55e';
+                      label = 'Connected';
+                    }
+                  } else if (p.detailedState === 'reconnecting') {
+                    badgeClass = 'danger';
+                    dotColor = '#f97316';
+                    label = 'Reconnecting';
+                  } else if (p.detailedState === 'failed') {
+                    badgeClass = 'failed';
+                    dotColor = '#ef4444';
+                    label = 'Failed';
+                  }
 
                   return (
                     <div
@@ -691,12 +709,10 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                       }}
                       title={`Click to view diagnostics for ${peerName}`}
                     >
-                      <div className="peer-item-left">
-                        <span className="peer-status-dot" style={{ backgroundColor: dotColor }} />
-                        <span className="peer-item-name">{peerName}</span>
-                      </div>
-                      <span className="peer-item-ping">
-                        {p.pingMs !== null ? `${p.pingMs}ms` : (p.detailedState === 'connected' ? 'connected' : p.detailedState)}
+                      <span className="peer-item-name">{peerName}</span>
+                      <span className={`peer-status-pill ${badgeClass}`}>
+                        <span className="health-dot" style={{ backgroundColor: dotColor }} />
+                        <span>{label}</span>
                       </span>
                     </div>
                   );
