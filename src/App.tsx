@@ -5,7 +5,7 @@ import { pdfService } from './services/PdfService';
 import { CaseSlicer } from './components/CaseSlicer';
 import { PDFViewer } from './components/PDFViewer';
 import { AppLogo } from './components/AppLogo';
-import { Play, BookOpen, Share2, Check, Laptop, Users, Loader2, Info, ArrowLeft, RotateCcw, Trash2, Scissors, Download, Pause, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Star, Wrench, Copy, MoreVertical, CheckCircle2, Upload, Clock, X, History, User, Settings, ArrowRight, FileSpreadsheet, Activity, ShieldAlert } from 'lucide-react';
+import { Play, BookOpen, Share2, Check, Laptop, Users, Loader2, Info, ArrowLeft, RotateCcw, Trash2, Scissors, Download, Pause, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Star, Wrench, Copy, MoreVertical, CheckCircle2, Upload, Clock, X, History, User, Settings, ArrowRight, FileSpreadsheet, Activity, ShieldAlert, WifiOff } from 'lucide-react';
 import './App.css';
 
 // --- Environment Detection ---
@@ -624,6 +624,8 @@ const CaseeSession: React.FC<{
   const [detailedState, setDetailedState] = useState<DetailedConnectionState>('connecting_signaling');
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
+  const hostEndedSessionRef = useRef(false);
   const [sessionData, setSessionData] = useState<{ metadata: any, pdfBuffer: ArrayBuffer, caserName?: string } | null>(null);
   const [revealedPages, setRevealedPages] = useState<{ number: number, title: string }[]>([]);
   const [lastRevealedPage, setLastRevealedPage] = useState<number | null>(null);
@@ -743,6 +745,7 @@ const CaseeSession: React.FC<{
       } else if (msg.type === 'SESSION_END') {
         if (!hasExitedRef.current) {
           hasExitedRef.current = true;
+          hostEndedSessionRef.current = true;
           peerService.destroy();
           if (isElectron) {
             setShowPostSession(true);
@@ -757,12 +760,22 @@ const CaseeSession: React.FC<{
     return () => { peerService.destroy(); clearTimeout(timeout); };
   }, []);
 
+  const handleReconnect = () => {
+    setDisconnectReason(null);
+    setStatus('connecting');
+    setErrorMessage('');
+    peerService.init();
+    peerService.onDetailedStateChange(setDetailedState);
+    peerService.onPingChange(setPingMs);
+    peerService.join(joinIdRef.current);
+  };
+
   const handleExit = () => {
     if (hasExitedRef.current) return;
     hasExitedRef.current = true;
     window.history.replaceState({}, '', window.location.pathname);
     peerService.destroy();
-    if (hadSessionRef.current && isElectron) {
+    if (hadSessionRef.current && isElectron && hostEndedSessionRef.current) {
       setShowPostSession(true);
     } else {
       onBack();
@@ -776,12 +789,21 @@ const CaseeSession: React.FC<{
     onBack();
   };
 
-  // Trigger post-session when caser disconnects mid-session
+  // Trigger disconnect screen when connection drops unexpectedly mid-session
   useEffect(() => {
-    if (status === 'idle' && hadSessionRef.current && !hasExitedRef.current) {
-      handleExit();
+    if (status === 'idle' && hadSessionRef.current && !hasExitedRef.current && !hostEndedSessionRef.current) {
+      let reason = 'Lost connection to partner.';
+      if (sessionData?.caserName) {
+        reason = `Lost connection to ${sessionData.caserName}. Their app may have closed or their network dropped.`;
+      }
+      if (detailedState === 'failed' || errorMessage === 'nat-firewall-blocked') {
+        reason = 'Router or firewall restrictions (Symmetric NAT) blocked direct peer communication.';
+      } else if (detailedState === 'reconnecting' || errorMessage === 'connection-lost') {
+        reason = 'Connection timed out after network packet loss.';
+      }
+      setDisconnectReason(reason);
     }
-  }, [status]);
+  }, [status, detailedState, errorMessage, sessionData]);
 
   const handleSaveAndExit = async (outcome: HistoryOutcome) => {
     if (hadSessionRef.current && sessionData) {
@@ -903,6 +925,65 @@ const CaseeSession: React.FC<{
             </button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (disconnectReason && !showPostSession) {
+    return (
+      <div className="landing-container">
+        <div className="loader-container" style={{ width: '100%', maxWidth: '480px', textAlign: 'center' }}>
+          <div className="icon-wrapper" style={{ background: '#fef3c7', color: '#d97706', margin: '0 auto 1rem' }}>
+            <WifiOff size={36} />
+          </div>
+          <h2 style={{ fontSize: '1.4rem', marginBottom: '0.35rem' }}>Session Disconnected</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+            {sessionData?.metadata?.title || 'Casing Session'} {sessionData?.caserName ? `with ${sessionData.caserName}` : ''}
+          </p>
+
+          <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '1rem', marginBottom: '1.25rem', textAlign: 'left' }}>
+            <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.35rem', letterSpacing: '0.04em' }}>
+              Disconnect Reason
+            </p>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-main)', margin: 0, lineHeight: 1.5 }}>
+              {disconnectReason}
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+            <button
+              className="btn btn-primary"
+              style={{ justifyContent: 'center', padding: '0.85rem' }}
+              onClick={handleReconnect}
+            >
+              <RotateCcw size={16} style={{ marginRight: '0.35rem' }} /> Reconnect to Session
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{ justifyContent: 'center' }}
+              onClick={() => setShowDiagnostics(true)}
+            >
+              <Activity size={16} style={{ marginRight: '0.35rem' }} /> View Diagnostics
+            </button>
+            {hadSessionRef.current && isElectron && (
+              <button
+                className="btn btn-ghost"
+                style={{ justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}
+                onClick={() => setShowPostSession(true)}
+              >
+                Save Notes & Record Session to History
+              </button>
+            )}
+            <button
+              className="btn btn-ghost"
+              style={{ justifyContent: 'center' }}
+              onClick={handleForceExit}
+            >
+              Exit to Home
+            </button>
+          </div>
+        </div>
+        <NetworkDiagnosticsModal isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
       </div>
     );
   }
