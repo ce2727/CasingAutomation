@@ -121,6 +121,7 @@ const NetworkDiagnosticsModal: React.FC<{
 }> = ({ isOpen, onClose, initialPeerId }) => {
   if (!isOpen) return null;
   const [copied, setCopied] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => peerService.getDiagnostics());
   const [selectedPeerId, setSelectedPeerId] = useState<string>('all');
 
@@ -231,51 +232,76 @@ const NetworkDiagnosticsModal: React.FC<{
             <span className="kpi-val">{displayIce}</span>
           </div>
           <div className="diag-kpi">
-            <span className="kpi-label">Channel Send Buffer</span>
-            <span className="kpi-val">{(displayBuffer / 1024).toFixed(1)} KB</span>
+            <span className="kpi-label">{isViewingSpecificPeer ? 'Participant' : 'Active Peers'}</span>
+            <span className="kpi-val" style={{ fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {isViewingSpecificPeer ? (activePeer?.name || 'Partner') : `${snapshot.remotePeerIds.length} connected`}
+            </span>
           </div>
         </div>
 
-        <div className="diag-meta-section">
-          <div><strong>Role:</strong> {snapshot.role.toUpperCase()}</div>
-          <div><strong>Local Peer ID:</strong> <code>{snapshot.peerId || 'None'}</code></div>
-          {isViewingSpecificPeer ? (
-            <>
-              <div><strong>Peer:</strong> <strong>{activePeer?.name}</strong> (<code>{activePeer?.peerId}</code>)</div>
-              <div><strong>WebRTC Channel:</strong> <code>{activePeer?.connectionState}</code></div>
-            </>
-          ) : (
-            <div><strong>Connected Peer(s):</strong> <code>{snapshot.remotePeerIds.join(', ') || 'None'}</code></div>
-          )}
-          <div><strong>Local ICE Candidates:</strong> {snapshot.localCandidates.length > 0 ? snapshot.localCandidates.join(', ') : 'None gathered yet'}</div>
-        </div>
-
-        <div className="diag-logs-header">
-          <span>
-            {isViewingSpecificPeer
-              ? `Telemetry Events for ${activePeer?.name} (${displayEvents.length})`
-              : `Live Telemetry Events (${displayEvents.length})`}
+        <button
+          type="button"
+          className="diag-advanced-toggle"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            {showAdvanced ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Advanced Settings & Logs</span>
+          </div>
+          <span style={{ fontSize: '0.725rem', color: '#64748b' }}>
+            {showAdvanced ? 'Hide technical details' : `${displayEvents.length} events recorded`}
           </span>
-        </div>
-        <div className="diag-log-box">
-          {displayEvents.length === 0 ? (
-            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No telemetry events recorded for this peer yet.</div>
-          ) : (
-            displayEvents.map((e, idx) => (
-              <div key={idx} className="diag-log-row">
-                <span className="log-time">[{e.timeStr}]</span>
-                <span className={`log-cat cat-${e.category}`}>[{e.category.toUpperCase()}]</span>
-                <span className="log-msg">{e.message}</span>
-              </div>
-            ))
-          )}
-        </div>
+        </button>
+
+        {showAdvanced && (
+          <div className="diag-advanced-content">
+            <div className="diag-meta-section">
+              <div><strong>Role:</strong> {snapshot.role.toUpperCase()}</div>
+              <div><strong>Local Peer ID:</strong> <code>{snapshot.peerId || 'None'}</code></div>
+              {isViewingSpecificPeer ? (
+                <>
+                  <div><strong>Peer:</strong> <strong>{activePeer?.name}</strong> (<code>{activePeer?.peerId}</code>)</div>
+                  <div><strong>WebRTC Channel:</strong> <code>{activePeer?.connectionState}</code></div>
+                </>
+              ) : (
+                <div><strong>Connected Peer(s):</strong> <code>{snapshot.remotePeerIds.join(', ') || 'None'}</code></div>
+              )}
+              <div><strong>DataChannel Buffer:</strong> <code>{(displayBuffer / 1024).toFixed(1)} KB</code></div>
+              <div><strong>Local ICE Candidates:</strong> {snapshot.localCandidates.length > 0 ? snapshot.localCandidates.join(', ') : 'None gathered yet'}</div>
+            </div>
+
+            <div className="diag-logs-header">
+              <span>
+                {isViewingSpecificPeer
+                  ? `Telemetry Events for ${activePeer?.name} (${displayEvents.length})`
+                  : `Live Telemetry Events (${displayEvents.length})`}
+              </span>
+            </div>
+            <div className="diag-log-box">
+              {displayEvents.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No telemetry events recorded for this peer yet.</div>
+              ) : (
+                displayEvents.map((e, idx) => (
+                  <div key={idx} className="diag-log-row">
+                    <span className="log-time">[{e.timeStr}]</span>
+                    <span className={`log-cat cat-${e.category}`}>[{e.category.toUpperCase()}]</span>
+                    <span className="log-msg">{e.message}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="diag-footer">
-          <button className="btn btn-ghost" onClick={handleCopy} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border)', fontSize: '0.875rem' }}>
-            {copied ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
-            {copied ? 'Diagnostic Log Copied!' : isViewingSpecificPeer ? `Copy Log for ${activePeer?.name}` : 'Copy Diagnostic Log'}
-          </button>
+          {showAdvanced ? (
+            <button className="btn btn-ghost" onClick={handleCopy} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border)', fontSize: '0.875rem' }}>
+              {copied ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
+              {copied ? 'Diagnostic Log Copied!' : isViewingSpecificPeer ? `Copy Log for ${activePeer?.name}` : 'Copy Diagnostic Log'}
+            </button>
+          ) : (
+            <div />
+          )}
           <button className="btn btn-primary" onClick={onClose}>
             Done
           </button>

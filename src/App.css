@@ -2217,6 +2217,48 @@ textarea:focus {
   border-top: 1px solid var(--border);
 }
 
+/* --- Diagnostic Advanced Settings Toggle --- */
+
+.diag-advanced-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  user-select: none;
+}
+
+.diag-advanced-toggle:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.diag-advanced-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  animation: diagFadeIn 0.15s ease-out;
+}
+
+@keyframes diagFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* --- Progressive Connection Steps --- */
 
 .connection-steps-container {
