@@ -547,14 +547,20 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
 
   useEffect(() => {
     if (connectionCount > 0 && !sessionInitializedRef.current) {
+      sessionInitializedRef.current = true;
+      const { pdfBlob, ...metadataWithoutBlob } = caseFile;
+      // 1. Send metadata and names immediately (<2KB, arrives in ~20ms)
+      peerService.send('SESSION_INIT', {
+        metadata: metadataWithoutBlob,
+        revealedExhibits: revealedPages.map(pageNum => ({ number: pageNum, title: caseFile.pages[pageNum - 1].title })),
+        caserName: userName,
+      });
+
+      // 2. Transmit the heavy PDF buffer right after without blocking metadata or heartbeats
       caseFile.pdfBlob.arrayBuffer().then(buffer => {
-        peerService.send('SESSION_INIT', {
-          metadata: caseFile,
+        peerService.send('SESSION_PDF', {
           pdfBuffer: buffer,
-          revealedExhibits: revealedPages.map(pageNum => ({ number: pageNum, title: caseFile.pages[pageNum - 1].title })),
-          caserName: userName,
         });
-        sessionInitializedRef.current = true;
       });
     }
   }, [connectionCount, caseFile, userName]);
@@ -850,7 +856,7 @@ const CaseeSession: React.FC<{
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
   const hostEndedSessionRef = useRef(false);
-  const [sessionData, setSessionData] = useState<{ metadata: any, pdfBuffer: ArrayBuffer, caserName?: string } | null>(null);
+  const [sessionData, setSessionData] = useState<{ metadata: any, pdfBuffer?: ArrayBuffer | null, caserName?: string } | null>(null);
   const [revealedPages, setRevealedPages] = useState<{ number: number, title: string }[]>([]);
   const [lastRevealedPage, setLastRevealedPage] = useState<number | null>(null);
   const [seconds, setSeconds] = useState(0);
@@ -934,6 +940,7 @@ const CaseeSession: React.FC<{
     else if (state === 'signaling_ready') lastActiveStepRef.current = 2;
     else if (state === 'discovering_route') lastActiveStepRef.current = 3;
     else if (state === 'connecting_peer') lastActiveStepRef.current = 4;
+    else if (state === 'connected') lastActiveStepRef.current = 5;
   };
 
   const startConnection = (code: string) => {
@@ -968,6 +975,7 @@ const CaseeSession: React.FC<{
         }
         setStatus('connected');
         statusRef.current = 'connected';
+        lastActiveStepRef.current = 5;
         if (caseeNameRef.current) {
           peerService.send('PEER_INFO', { name: caseeNameRef.current });
         }
@@ -983,6 +991,12 @@ const CaseeSession: React.FC<{
         clearTimeout(connectionTimeoutRef.current);
         connectionTimeoutRef.current = null;
       }
+      if (hadSessionRef.current) {
+        setStatus('idle');
+        statusRef.current = 'idle';
+        setErrorMessage(err);
+        return;
+      }
       setStatus('error');
       statusRef.current = 'error';
       setErrorMessage(err);
@@ -992,10 +1006,22 @@ const CaseeSession: React.FC<{
       if (msg.type === 'SESSION_INIT') {
         hadSessionRef.current = true;
         setRevealedPages(msg.payload.revealedExhibits || []);
-        setSessionData({ metadata: msg.payload.metadata, pdfBuffer: msg.payload.pdfBuffer, caserName: msg.payload.caserName });
+        setSessionData(prev => ({
+          metadata: msg.payload.metadata,
+          pdfBuffer: msg.payload.pdfBuffer || prev?.pdfBuffer || null,
+          caserName: msg.payload.caserName || prev?.caserName,
+        }));
         if (caseeNameRef.current) {
           peerService.send('PEER_INFO', { name: caseeNameRef.current });
         }
+      } else if (msg.type === 'SESSION_PDF') {
+        setSessionData(prev => prev ? ({
+          ...prev,
+          pdfBuffer: msg.payload.pdfBuffer,
+        }) : {
+          metadata: null,
+          pdfBuffer: msg.payload.pdfBuffer,
+        });
       } else if (msg.type === 'REVEAL_PAGE') {
         const { pageNumber, title, isRevealed } = msg.payload;
         if (isRevealed) setLastRevealedPage(pageNumber);
@@ -1258,7 +1284,7 @@ const CaseeSession: React.FC<{
     );
   }
 
-  if (status !== 'connected' && !hasExitedRef.current) {
+  if (status !== 'connected' && !hasExitedRef.current && !disconnectReason) {
     let failedStep = lastActiveStepRef.current;
     if (errorMessage === 'peer-unavailable') {
       failedStep = 2;
@@ -1477,7 +1503,14 @@ const CaseeSession: React.FC<{
                 <div key={p.number} id={`exhibit-${p.number}`} className="exhibit-card-wrapper">
                   <div className="exhibit-label">{p.title}</div>
                   <div className="card exhibit-content">
-                    <PDFViewer blob={sessionData.pdfBuffer} pageNumber={p.number} id={sessionData.metadata.id} />
+                    {sessionData.pdfBuffer ? (
+                      <PDFViewer blob={sessionData.pdfBuffer} pageNumber={p.number} id={sessionData.metadata.id} />
+                    ) : (
+                      <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <Loader2 size={28} className="animate-spin" style={{ margin: '0 auto 0.75rem', opacity: 0.6 }} />
+                        <p style={{ fontSize: '0.85rem', margin: 0 }}>Downloading exhibit document...</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -1489,7 +1522,14 @@ const CaseeSession: React.FC<{
                     <div>
                       <p>Exhibits will appear here</p>
                       <span className="hint-xs" style={{ marginTop: '0.5rem', display: 'block' }}>
-                        Waiting for {sessionData?.caserName || 'your partner'} to share a page...
+                        {sessionData?.pdfBuffer ? (
+                          `Waiting for ${sessionData?.caserName || 'your partner'} to share a page...`
+                        ) : (
+                          <>
+                            <Loader2 size={13} className="animate-spin" style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                            Receiving case data from {sessionData?.caserName || 'partner'}...
+                          </>
+                        )}
                       </span>
                     </div>
                   </>

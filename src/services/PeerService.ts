@@ -2,6 +2,7 @@ import Peer, { type DataConnection } from 'peerjs';
 
 export type MessageType = 
   | 'SESSION_INIT' 
+  | 'SESSION_PDF'
   | 'REVEAL_PAGE' 
   | 'SYNC_STATE' 
   | 'TIMER_SYNC' 
@@ -84,6 +85,8 @@ export class PeerService {
   private localCandidates: string[] = [];
   private diagnosticEvents: DiagnosticEvent[] = [];
   private disconnectGraceTimer: any = null;
+  private hasConnectedOnce: boolean = false;
+  private lastSessionPdf: PeerMessage | null = null;
 
   public setPeerName(peerId: string, name: string) {
     if (peerId && name) {
@@ -119,6 +122,7 @@ export class PeerService {
   public init(id?: string) {
     this.destroy();
     this.destroyed = false;
+    this.hasConnectedOnce = false;
     this.setDetailedState('connecting_signaling');
     this.logEvent('signaling', id ? `Initializing peer with requested ID: ${id}` : 'Initializing peer with random ID');
 
@@ -240,6 +244,7 @@ export class PeerService {
         if (pc.iceConnectionState === 'checking') {
           this.setDetailedState('connecting_peer');
         } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          this.hasConnectedOnce = true;
           if (this.disconnectGraceTimer) {
             clearTimeout(this.disconnectGraceTimer);
             this.disconnectGraceTimer = null;
@@ -247,16 +252,21 @@ export class PeerService {
           }
           this.setDetailedState('connected');
         } else if (pc.iceConnectionState === 'failed') {
-          this.logEvent('error', 'ICE connection failed: Direct peer-to-peer route blocked by router/firewall (Symmetric NAT).', undefined, conn.peer);
-          cleanup('nat-firewall-blocked');
+          if (this.hasConnectedOnce) {
+            this.logEvent('error', 'ICE connection dropped after active session.', undefined, conn.peer);
+            cleanup('connection-lost');
+          } else {
+            this.logEvent('error', 'ICE connection failed: Direct peer-to-peer route blocked by router/firewall (Symmetric NAT).', undefined, conn.peer);
+            cleanup('nat-firewall-blocked');
+          }
         } else if (pc.iceConnectionState === 'disconnected') {
           this.setDetailedState('reconnecting');
-          this.logEvent('ice', 'Connection interrupted (packet loss/jitter). Grace period 6s started...', undefined, conn.peer);
+          this.logEvent('ice', 'Connection interrupted (packet loss/jitter). Grace period 25s started...', undefined, conn.peer);
           if (!this.disconnectGraceTimer) {
             this.disconnectGraceTimer = setTimeout(() => {
-              this.logEvent('error', 'Disconnect grace period expired (6s).', undefined, conn.peer);
+              this.logEvent('error', 'Disconnect grace period expired (25s).', undefined, conn.peer);
               cleanup('connection-lost');
-            }, 6000);
+            }, 25000);
           }
         }
       });
@@ -264,13 +274,18 @@ export class PeerService {
       pc.addEventListener('connectionstatechange', () => {
         this.logEvent('ice', `Peer Connection State: ${pc.connectionState}`, undefined, conn.peer);
         if (pc.connectionState === 'connected') {
+          this.hasConnectedOnce = true;
           if (this.disconnectGraceTimer) {
             clearTimeout(this.disconnectGraceTimer);
             this.disconnectGraceTimer = null;
           }
           this.setDetailedState('connected');
         } else if (pc.connectionState === 'failed') {
-          cleanup('nat-firewall-blocked');
+          if (this.hasConnectedOnce) {
+            cleanup('connection-lost');
+          } else {
+            cleanup('nat-firewall-blocked');
+          }
         }
       });
     }
@@ -310,6 +325,7 @@ export class PeerService {
       this.hookConnectionDiagnostics(conn, cleanup);
 
       conn.on('open', () => {
+        this.hasConnectedOnce = true;
         const peerLabel = this.peerNames.get(conn.peer) || conn.peer;
         this.logEvent('data', `DataChannel opened with partner: ${peerLabel}`, undefined, conn.peer);
         this.connections.push(conn);
@@ -320,6 +336,9 @@ export class PeerService {
         // Catch up the new peer immediately
         if (this.lastSessionInit) {
           conn.send(this.lastSessionInit);
+          if (this.lastSessionPdf) {
+            conn.send(this.lastSessionPdf);
+          }
           this.currentRevealedPages.forEach(msg => conn.send(msg));
           if (this.lastTimerSync) conn.send(this.lastTimerSync);
         }
@@ -382,17 +401,19 @@ export class PeerService {
       this.currentPing = null;
       this.logEvent('ice', `Connection to host terminated. (Reason: ${reason || 'closed'})`, undefined, conn.peer);
       this.onConnectionChangeCallback?.(0);
-      if (reason === 'nat-firewall-blocked') {
+      if (reason === 'nat-firewall-blocked' && !this.hasConnectedOnce) {
         this.setDetailedState('failed');
         this.onErrorCallback?.('nat-firewall-blocked');
       } else {
         this.setDetailedState('idle');
+        this.onErrorCallback?.(reason || 'connection-lost');
       }
     };
 
     this.hookConnectionDiagnostics(conn, cleanup);
 
     conn.on('open', () => {
+      this.hasConnectedOnce = true;
       this.logEvent('data', `DataChannel opened to host: ${hostId}`, undefined, hostId);
       this.connections = [conn];
       this.setDetailedState('connected');
@@ -433,7 +454,15 @@ export class PeerService {
       this.lastSessionInit = msg;
       this.currentRevealedPages = [];
       const bufferSize = payload.pdfBuffer?.byteLength || 0;
-      this.logEvent('data', `Transmitting SESSION_INIT (PDF payload: ${(bufferSize / 1024 / 1024).toFixed(2)} MB)`);
+      if (bufferSize > 0) {
+        this.logEvent('data', `Transmitting SESSION_INIT (PDF payload: ${(bufferSize / 1024 / 1024).toFixed(2)} MB)`);
+      } else {
+        this.logEvent('data', `Transmitting SESSION_INIT metadata for: ${payload.caserName || 'unknown'}`);
+      }
+    } else if (type === 'SESSION_PDF') {
+      this.lastSessionPdf = msg;
+      const bufferSize = payload.pdfBuffer?.byteLength || 0;
+      this.logEvent('data', `Transmitting SESSION_PDF (Payload: ${(bufferSize / 1024 / 1024).toFixed(2)} MB)`);
     } else if (type === 'REVEAL_PAGE') {
       if (payload.isRevealed) {
         this.currentRevealedPages.push(msg);
@@ -578,9 +607,11 @@ export class PeerService {
     this.connections = [];
     if (this.peer) { this.peer.destroy(); this.peer = null; }
     this.lastSessionInit = null;
+    this.lastSessionPdf = null;
     this.currentRevealedPages = [];
     this.lastTimerSync = null;
     this.detailedState = 'idle';
+    this.hasConnectedOnce = false;
     this.currentPing = null;
     this.localCandidates = [];
     this.logEvent('signaling', 'PeerService destroyed.');
