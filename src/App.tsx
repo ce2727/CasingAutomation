@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { libraryService, type CasePackage, type HistoryEntry, type HistoryOutcome, type ImportResult } from './services/LibraryService';
-import { peerService } from './services/PeerService';
+import { peerService, type DetailedConnectionState, type DiagnosticsSnapshot } from './services/PeerService';
 import { pdfService } from './services/PdfService';
 import { CaseSlicer } from './components/CaseSlicer';
 import { PDFViewer } from './components/PDFViewer';
 import { AppLogo } from './components/AppLogo';
-import { Play, BookOpen, Share2, Check, Laptop, Users, Loader2, Info, ArrowLeft, RotateCcw, Trash2, Scissors, Download, Pause, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Star, Wrench, Copy, MoreVertical, CheckCircle2, Upload, Clock, X, History, User, Settings, ArrowRight, FileSpreadsheet } from 'lucide-react';
+import { Play, BookOpen, Share2, Check, Laptop, Users, Loader2, Info, ArrowLeft, RotateCcw, Trash2, Scissors, Download, Pause, ChevronLeft, ChevronRight, ChevronDown, Plus, Search, Star, Wrench, Copy, MoreVertical, CheckCircle2, Upload, Clock, X, History, User, Settings, ArrowRight, FileSpreadsheet, Activity, ShieldAlert } from 'lucide-react';
 import './App.css';
 
 // --- Environment Detection ---
@@ -49,6 +49,171 @@ const getTypeColorClass = (type: string) => {
     case 'Pricing': return 'pricing';
     default: return 'other';
   }
+};
+
+// --- Network Diagnostics & Telemetry Components ---
+
+const ConnectionHealthPill: React.FC<{
+  count: number;
+  detailedState: DetailedConnectionState;
+  pingMs: number | null;
+  onClick: () => void;
+}> = ({ count, detailedState, pingMs, onClick }) => {
+  let badgeClass = 'waiting';
+  let label = 'Connecting...';
+  let dotColor = '#eab308';
+
+  if (detailedState === 'connected' && count > 0) {
+    if (pingMs !== null) {
+      if (pingMs < 150) {
+        badgeClass = 'healthy';
+        dotColor = '#22c55e';
+        label = `${pingMs}ms`;
+      } else if (pingMs < 400) {
+        badgeClass = 'warning';
+        dotColor = '#eab308';
+        label = `${pingMs}ms (Lag)`;
+      } else {
+        badgeClass = 'danger';
+        dotColor = '#f97316';
+        label = `${pingMs}ms (Slow)`;
+      }
+    } else {
+      badgeClass = 'healthy';
+      dotColor = '#22c55e';
+      label = 'Connected';
+    }
+  } else if (detailedState === 'reconnecting') {
+    badgeClass = 'danger';
+    dotColor = '#f97316';
+    label = 'Reconnecting...';
+  } else if (detailedState === 'failed') {
+    badgeClass = 'failed';
+    dotColor = '#ef4444';
+    label = 'Blocked / Failed';
+  } else if (count > 0) {
+    badgeClass = 'healthy';
+    dotColor = '#22c55e';
+    label = `${count} Connected`;
+  } else {
+    badgeClass = 'waiting';
+    dotColor = '#94a3b8';
+    label = 'Waiting for Peer';
+  }
+
+  return (
+    <button
+      type="button"
+      className={`connection-health-pill ${badgeClass}`}
+      onClick={onClick}
+      title="Click to view network diagnostics & latency"
+    >
+      <span className="health-dot" style={{ backgroundColor: dotColor }} />
+      <span>{label}</span>
+    </button>
+  );
+};
+
+const NetworkDiagnosticsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+  const [copied, setCopied] = useState(false);
+  const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(peerService.getDiagnostics());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSnapshot(peerService.getDiagnostics());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleCopy = () => {
+    const text = peerService.getDiagnosticLogText();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const getStatusColor = (st: DetailedConnectionState) => {
+    switch (st) {
+      case 'connected': return '#22c55e';
+      case 'reconnecting': return '#f97316';
+      case 'failed': return '#ef4444';
+      default: return '#eab308';
+    }
+  };
+
+  return (
+    <div className="modal" style={{ zIndex: 9999 }}>
+      <div className="network-diag-card">
+        <div className="diag-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <Activity size={20} color="#2563eb" />
+            <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Network Diagnostics & Telemetry</h3>
+          </div>
+          <button className="btn-icon-mini" onClick={onClose} title="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="diag-grid">
+          <div className="diag-kpi">
+            <span className="kpi-label">Connection State</span>
+            <span className="kpi-val" style={{ color: getStatusColor(snapshot.detailedState) }}>
+              {snapshot.detailedState}
+            </span>
+          </div>
+          <div className="diag-kpi">
+            <span className="kpi-label">Round-Trip Ping</span>
+            <span className="kpi-val" style={{ color: snapshot.pingMs !== null ? (snapshot.pingMs < 150 ? '#22c55e' : snapshot.pingMs < 400 ? '#eab308' : '#ef4444') : 'inherit' }}>
+              {snapshot.pingMs !== null ? `${snapshot.pingMs} ms` : 'N/A'}
+            </span>
+          </div>
+          <div className="diag-kpi">
+            <span className="kpi-label">ICE State</span>
+            <span className="kpi-val">{snapshot.iceConnectionState}</span>
+          </div>
+          <div className="diag-kpi">
+            <span className="kpi-label">Channel Send Buffer</span>
+            <span className="kpi-val">{(snapshot.bufferedAmount / 1024).toFixed(1)} KB</span>
+          </div>
+        </div>
+
+        <div className="diag-meta-section">
+          <div><strong>Role:</strong> {snapshot.role.toUpperCase()}</div>
+          <div><strong>Local Peer ID:</strong> <code>{snapshot.peerId || 'None'}</code></div>
+          <div><strong>Connected Peer(s):</strong> <code>{snapshot.remotePeerIds.join(', ') || 'None'}</code></div>
+          <div><strong>Local ICE Candidates:</strong> {snapshot.localCandidates.length > 0 ? snapshot.localCandidates.join(', ') : 'None gathered yet'}</div>
+        </div>
+
+        <div className="diag-logs-header">
+          <span>Live Telemetry Events ({snapshot.events.length})</span>
+        </div>
+        <div className="diag-log-box">
+          {snapshot.events.length === 0 ? (
+            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No telemetry events recorded yet.</div>
+          ) : (
+            snapshot.events.map((e, idx) => (
+              <div key={idx} className="diag-log-row">
+                <span className="log-time">[{e.timeStr}]</span>
+                <span className={`log-cat cat-${e.category}`}>[{e.category.toUpperCase()}]</span>
+                <span className="log-msg">{e.message}</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="diag-footer">
+          <button className="btn btn-secondary" onClick={handleCopy} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {copied ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
+            {copied ? 'Diagnostic Log Copied!' : 'Copy Diagnostic Log'}
+          </button>
+          <button className="btn btn-primary" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // --- Components ---
@@ -190,6 +355,9 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
   const activePeersMapRef = useRef<Map<string, string>>(new Map());
   const [peerCaseeName, setPeerCaseeName] = useState<string | null>(null);
   const [connectedNames, setConnectedNames] = useState<string[]>([]);
+  const [detailedState, setDetailedState] = useState<DetailedConnectionState>('idle');
+  const [pingMs, setPingMs] = useState<number | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
     const load = async () => { const doc = await pdfService.loadDocument(caseFile.pdfBlob, caseFile.id); setTotalPages(doc.numPages); };
@@ -201,6 +369,8 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
     
     peerService.init(generatedId);
     peerService.onOpen(setPeerId);
+    peerService.onDetailedStateChange(setDetailedState);
+    peerService.onPingChange(setPingMs);
     peerService.host();
     peerService.onConnectionCountChange((count, activePeerIds) => {
       setConnectionCount(count);
@@ -363,9 +533,12 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                   {peerId || '...'}
                 </div>
               </div>
-              <div className={`status-pill-mini ${connectionCount > 0 ? 'active' : 'waiting'}`} style={{ fontSize: '0.6rem', padding: '0.15rem 0.5rem' }}>
-                {connectionCount} Connected
-              </div>
+              <ConnectionHealthPill
+                count={connectionCount}
+                detailedState={detailedState}
+                pingMs={pingMs}
+                onClick={() => setShowDiagnostics(true)}
+              />
             </div>
             <div className="url-box-sm" style={{ marginTop: '0' }}>
               <span style={{ fontSize: '0.65rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
@@ -434,6 +607,7 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
           </div>
         </div>
       </div>
+      <NetworkDiagnosticsModal isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
     </div>
   );
 };
@@ -447,6 +621,9 @@ const CaseeSession: React.FC<{
 }> = ({ initialJoinId, userName: initialUserName, onBack, onNameUpdate }) => {
   const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [detailedState, setDetailedState] = useState<DetailedConnectionState>('connecting_signaling');
+  const [pingMs, setPingMs] = useState<number | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [sessionData, setSessionData] = useState<{ metadata: any, pdfBuffer: ArrayBuffer, caserName?: string } | null>(null);
   const [revealedPages, setRevealedPages] = useState<{ number: number, title: string }[]>([]);
   const [lastRevealedPage, setLastRevealedPage] = useState<number | null>(null);
@@ -523,6 +700,9 @@ const CaseeSession: React.FC<{
 
   useEffect(() => {
     peerService.init();
+    peerService.onDetailedStateChange(setDetailedState);
+    peerService.onPingChange(setPingMs);
+
     const timeout = setTimeout(() => {
       if (status !== 'connected') { setStatus('error'); setErrorMessage('Connection timed out. Ensure your partner has started their session.'); }
     }, 20000);
@@ -540,7 +720,11 @@ const CaseeSession: React.FC<{
       }
     });
 
-    peerService.onError(err => { setStatus('error'); setErrorMessage(err === 'peer-unavailable' ? 'Partner not found.' : `Error: ${err}`); clearTimeout(timeout); });
+    peerService.onError(err => {
+      setStatus('error');
+      setErrorMessage(err);
+      clearTimeout(timeout);
+    });
 
     peerService.onMessage(msg => {
       if (msg.type === 'SESSION_INIT') {
@@ -724,21 +908,141 @@ const CaseeSession: React.FC<{
   }
 
   if (status !== 'connected' && !hasExitedRef.current) {
+    const getStepState = (step: number) => {
+      if (detailedState === 'connecting_signaling') return step === 1 ? 'active' : 'pending';
+      if (detailedState === 'signaling_ready') return step < 2 ? 'completed' : step === 2 ? 'active' : 'pending';
+      if (detailedState === 'discovering_route') return step < 3 ? 'completed' : step === 3 ? 'active' : 'pending';
+      if (detailedState === 'connecting_peer') return step < 4 ? 'completed' : step === 4 ? 'active' : 'pending';
+      if (detailedState === 'connected') return 'completed';
+      return 'pending';
+    };
+
     return (
       <div className="landing-container">
-        <div className="loader-container">
+        <div className="loader-container" style={{ width: '100%', maxWidth: '480px', textAlign: 'center' }}>
           {status === 'error' ? (
-            <>
-              <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626' }}><Info size={48} /></div>
-              <h2>Connection Failed</h2>
-              <p className="error-text" style={{ fontSize: '1.1rem', marginBottom: '1.5rem' }}>{errorMessage}</p>
-              <button className="btn btn-primary" onClick={handleExit}>Try Again</button>
-            </>
+            errorMessage === 'nat-firewall-blocked' ? (
+              <>
+                <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626', margin: '0 auto 1rem' }}>
+                  <ShieldAlert size={36} />
+                </div>
+                <h2 style={{ fontSize: '1.4rem', color: '#991b1b', marginBottom: '0.5rem' }}>
+                  Router Firewall Blocked Direct Link
+                </h2>
+                <div className="diagnostic-advice-box">
+                  <p>
+                    Your partner's Wi-Fi router or firewall (common with Symmetric NAT, campus, or 5G home internet) prevented establishing a direct peer-to-peer connection.
+                  </p>
+                  <strong>Suggested Workarounds:</strong>
+                  <ul>
+                    <li>Switch off Wi-Fi and connect via mobile phone hotspot.</li>
+                    <li>Connect to your school or work VPN.</li>
+                    <li>Have your partner host from a standard home Wi-Fi network.</li>
+                  </ul>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleExit}>
+                    Try Again
+                  </button>
+                  <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowDiagnostics(true)}>
+                    <Activity size={16} style={{ marginRight: '0.35rem' }} /> Diagnostics
+                  </button>
+                </div>
+              </>
+            ) : errorMessage === 'peer-unavailable' ? (
+              <>
+                <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626', margin: '0 auto 1rem' }}>
+                  <Info size={36} />
+                </div>
+                <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>Partner Session Not Found</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+                  Could not locate session <strong>{joinIdRef.current}</strong>. Check the code or verify your partner has started their session.
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleExit}>
+                    Try Again
+                  </button>
+                  <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowDiagnostics(true)}>
+                    <Activity size={16} style={{ marginRight: '0.35rem' }} /> Diagnostics
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="icon-wrapper" style={{ background: '#fee2e2', color: '#dc2626', margin: '0 auto 1rem' }}>
+                  <Info size={36} />
+                </div>
+                <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>Connection Failed</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+                  {errorMessage}
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleExit}>
+                    Try Again
+                  </button>
+                  <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowDiagnostics(true)}>
+                    <Activity size={16} style={{ marginRight: '0.35rem' }} /> Diagnostics
+                  </button>
+                </div>
+              </>
+            )
           ) : (
-            <><Loader2 size={48} className="animate-spin" color="#2563eb" /><h2>Connecting to Partner...</h2></>
+            <>
+              <Loader2 size={40} className="animate-spin" color="#2563eb" style={{ margin: '0 auto 1rem' }} />
+              <h2 style={{ fontSize: '1.35rem', marginBottom: '0.25rem' }}>Connecting to Partner...</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                Room Code: <strong style={{ letterSpacing: '0.05em' }}>{joinIdRef.current}</strong>
+              </p>
+
+              <div className="connection-steps-container">
+                <div className={`connection-step-row ${getStepState(1)}`}>
+                  <div className="step-badge">{getStepState(1) === 'completed' ? '✓' : '1'}</div>
+                  <div className="step-info">
+                    <span className="step-title">Signaling Network</span>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Connecting to session coordinator</span>
+                  </div>
+                </div>
+
+                <div className={`connection-step-row ${getStepState(2)}`}>
+                  <div className="step-badge">{getStepState(2) === 'completed' ? '✓' : '2'}</div>
+                  <div className="step-info">
+                    <span className="step-title">Locate Partner</span>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Handshaking with host session</span>
+                  </div>
+                </div>
+
+                <div className={`connection-step-row ${getStepState(3)}`}>
+                  <div className="step-badge">{getStepState(3) === 'completed' ? '✓' : '3'}</div>
+                  <div className="step-info">
+                    <span className="step-title">Discover Network Route</span>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>STUN public address & candidate exchange</span>
+                  </div>
+                </div>
+
+                <div className={`connection-step-row ${getStepState(4)}`}>
+                  <div className="step-badge">{getStepState(4) === 'completed' ? '✓' : '4'}</div>
+                  <div className="step-info">
+                    <span className="step-title">Peer-to-Peer Tunnel</span>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Opening encrypted WebRTC DataChannel</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowDiagnostics(true)} style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <Activity size={14} style={{ marginRight: '0.35rem' }} /> Live Diagnostics
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={handleForceExit} style={{ fontSize: '0.8rem' }}>
+                  Cancel
+                </button>
+              </div>
+            </>
           )}
-          <button className="btn btn-ghost" style={{ marginTop: '2rem' }} onClick={handleForceExit}>Back to Home</button>
+          <button className="btn btn-ghost" style={{ marginTop: '1.25rem' }} onClick={handleForceExit}>
+            Back to Home
+          </button>
         </div>
+        <NetworkDiagnosticsModal isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
       </div>
     );
   }
@@ -773,9 +1077,12 @@ const CaseeSession: React.FC<{
                   {sessionData?.caserName || '...'}
                 </div>
               </div>
-              <div className={`status-pill-mini ${status === 'connected' ? 'active' : 'waiting'}`} style={{ fontSize: '0.6rem', padding: '0.15rem 0.5rem', flexShrink: 0, marginLeft: '0.5rem' }}>
-                {status === 'connected' ? 'Connected' : 'Disconnected'}
-              </div>
+              <ConnectionHealthPill
+                count={status === 'connected' ? 1 : 0}
+                detailedState={detailedState}
+                pingMs={pingMs}
+                onClick={() => setShowDiagnostics(true)}
+              />
             </div>
           </div>
           <div className="exhibit-controls">
@@ -829,6 +1136,7 @@ const CaseeSession: React.FC<{
           </div>
         </div>
       </div>
+      <NetworkDiagnosticsModal isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
     </div>
   );
 };
