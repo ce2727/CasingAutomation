@@ -744,14 +744,8 @@ const CaseeSession: React.FC<{
         setSeconds(msg.payload.seconds);
       } else if (msg.type === 'SESSION_END') {
         if (!hasExitedRef.current) {
-          hasExitedRef.current = true;
           hostEndedSessionRef.current = true;
-          peerService.destroy();
-          if (isElectron) {
-            setShowPostSession(true);
-          } else {
-            onBack();
-          }
+          handleExit();
         }
       }
     });
@@ -775,7 +769,7 @@ const CaseeSession: React.FC<{
     hasExitedRef.current = true;
     window.history.replaceState({}, '', window.location.pathname);
     peerService.destroy();
-    if (hadSessionRef.current && isElectron && hostEndedSessionRef.current) {
+    if (hadSessionRef.current && isElectron) {
       setShowPostSession(true);
     } else {
       onBack();
