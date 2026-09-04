@@ -114,20 +114,45 @@ const ConnectionHealthPill: React.FC<{
   );
 };
 
-const NetworkDiagnosticsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const NetworkDiagnosticsModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  initialPeerId?: string;
+}> = ({ isOpen, onClose, initialPeerId }) => {
   if (!isOpen) return null;
   const [copied, setCopied] = useState(false);
-  const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(peerService.getDiagnostics());
+  const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot>(() => peerService.getDiagnostics());
+  const [selectedPeerId, setSelectedPeerId] = useState<string>('all');
 
   useEffect(() => {
+    const diag = peerService.getDiagnostics();
+    setSnapshot(diag);
+    if (initialPeerId && diag.peers.some(p => p.peerId === initialPeerId)) {
+      setSelectedPeerId(initialPeerId);
+    } else if (diag.peers.length === 1) {
+      setSelectedPeerId(diag.peers[0].peerId);
+    } else if (diag.peers.length > 1 && selectedPeerId === 'all') {
+      setSelectedPeerId('all');
+    }
+
     const interval = setInterval(() => {
       setSnapshot(peerService.getDiagnostics());
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isOpen, initialPeerId]);
+
+  // If selected peer disconnected, fall back gracefully
+  const activePeer = snapshot.peers.find(p => p.peerId === selectedPeerId);
+  const isViewingSpecificPeer = Boolean(activePeer);
+
+  const displayState = activePeer ? activePeer.detailedState : snapshot.detailedState;
+  const displayPing = activePeer ? activePeer.pingMs : snapshot.pingMs;
+  const displayIce = activePeer ? activePeer.iceConnectionState : snapshot.iceConnectionState;
+  const displayBuffer = activePeer ? activePeer.bufferedAmount : snapshot.bufferedAmount;
+  const displayEvents = activePeer ? activePeer.events : snapshot.events;
 
   const handleCopy = () => {
-    const text = peerService.getDiagnosticLogText();
+    const text = peerService.getDiagnosticLogText(activePeer?.peerId);
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -155,44 +180,86 @@ const NetworkDiagnosticsModal: React.FC<{ isOpen: boolean; onClose: () => void }
           </button>
         </div>
 
+        {snapshot.peers.length > 0 && (
+          <div className="diag-peer-tabs">
+            {snapshot.peers.length > 1 && (
+              <button
+                type="button"
+                className={`diag-peer-tab ${selectedPeerId === 'all' ? 'active' : ''}`}
+                onClick={() => setSelectedPeerId('all')}
+              >
+                All Events ({snapshot.events.length})
+              </button>
+            )}
+            {snapshot.peers.map((p) => {
+              const pingColor = p.pingMs !== null ? (p.pingMs < 150 ? '#22c55e' : p.pingMs < 400 ? '#eab308' : '#ef4444') : '#94a3b8';
+              return (
+                <button
+                  key={p.peerId}
+                  type="button"
+                  className={`diag-peer-tab ${selectedPeerId === p.peerId ? 'active' : ''}`}
+                  onClick={() => setSelectedPeerId(p.peerId)}
+                >
+                  <span className="diag-peer-tab-dot" style={{ backgroundColor: pingColor }} />
+                  <span style={{ fontWeight: 600 }}>{p.name}</span>
+                  <span style={{ fontSize: '0.7rem', opacity: 0.75, fontFamily: 'JetBrains Mono, monospace' }}>
+                    {p.pingMs !== null ? `${p.pingMs}ms` : 'N/A'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="diag-grid">
           <div className="diag-kpi">
             <span className="kpi-label">Connection State</span>
-            <span className="kpi-val" style={{ color: getStatusColor(snapshot.detailedState) }}>
-              {snapshot.detailedState}
+            <span className="kpi-val" style={{ color: getStatusColor(displayState) }}>
+              {displayState}
             </span>
           </div>
           <div className="diag-kpi">
             <span className="kpi-label">Round-Trip Ping</span>
-            <span className="kpi-val" style={{ color: snapshot.pingMs !== null ? (snapshot.pingMs < 150 ? '#22c55e' : snapshot.pingMs < 400 ? '#eab308' : '#ef4444') : 'inherit' }}>
-              {snapshot.pingMs !== null ? `${snapshot.pingMs} ms` : 'N/A'}
+            <span className="kpi-val" style={{ color: displayPing !== null ? (displayPing < 150 ? '#22c55e' : displayPing < 400 ? '#eab308' : '#ef4444') : 'inherit' }}>
+              {displayPing !== null ? `${displayPing} ms` : 'N/A'}
             </span>
           </div>
           <div className="diag-kpi">
             <span className="kpi-label">ICE State</span>
-            <span className="kpi-val">{snapshot.iceConnectionState}</span>
+            <span className="kpi-val">{displayIce}</span>
           </div>
           <div className="diag-kpi">
             <span className="kpi-label">Channel Send Buffer</span>
-            <span className="kpi-val">{(snapshot.bufferedAmount / 1024).toFixed(1)} KB</span>
+            <span className="kpi-val">{(displayBuffer / 1024).toFixed(1)} KB</span>
           </div>
         </div>
 
         <div className="diag-meta-section">
           <div><strong>Role:</strong> {snapshot.role.toUpperCase()}</div>
           <div><strong>Local Peer ID:</strong> <code>{snapshot.peerId || 'None'}</code></div>
-          <div><strong>Connected Peer(s):</strong> <code>{snapshot.remotePeerIds.join(', ') || 'None'}</code></div>
+          {isViewingSpecificPeer ? (
+            <>
+              <div><strong>Peer:</strong> <strong>{activePeer?.name}</strong> (<code>{activePeer?.peerId}</code>)</div>
+              <div><strong>WebRTC Channel:</strong> <code>{activePeer?.connectionState}</code></div>
+            </>
+          ) : (
+            <div><strong>Connected Peer(s):</strong> <code>{snapshot.remotePeerIds.join(', ') || 'None'}</code></div>
+          )}
           <div><strong>Local ICE Candidates:</strong> {snapshot.localCandidates.length > 0 ? snapshot.localCandidates.join(', ') : 'None gathered yet'}</div>
         </div>
 
         <div className="diag-logs-header">
-          <span>Live Telemetry Events ({snapshot.events.length})</span>
+          <span>
+            {isViewingSpecificPeer
+              ? `Telemetry Events for ${activePeer?.name} (${displayEvents.length})`
+              : `Live Telemetry Events (${displayEvents.length})`}
+          </span>
         </div>
         <div className="diag-log-box">
-          {snapshot.events.length === 0 ? (
-            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No telemetry events recorded yet.</div>
+          {displayEvents.length === 0 ? (
+            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>No telemetry events recorded for this peer yet.</div>
           ) : (
-            snapshot.events.map((e, idx) => (
+            displayEvents.map((e, idx) => (
               <div key={idx} className="diag-log-row">
                 <span className="log-time">[{e.timeStr}]</span>
                 <span className={`log-cat cat-${e.category}`}>[{e.category.toUpperCase()}]</span>
@@ -205,7 +272,7 @@ const NetworkDiagnosticsModal: React.FC<{ isOpen: boolean; onClose: () => void }
         <div className="diag-footer">
           <button className="btn btn-ghost" onClick={handleCopy} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border)', fontSize: '0.875rem' }}>
             {copied ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
-            {copied ? 'Diagnostic Log Copied!' : 'Copy Diagnostic Log'}
+            {copied ? 'Diagnostic Log Copied!' : isViewingSpecificPeer ? `Copy Log for ${activePeer?.name}` : 'Copy Diagnostic Log'}
           </button>
           <button className="btn btn-primary" onClick={onClose}>
             Done
@@ -553,7 +620,11 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                 {copied ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </div>
-            <div className={`connection-peers-box ${connectionCount > 0 ? 'active' : 'waiting'}`}>
+            <div
+              className={`connection-peers-box ${connectionCount > 0 ? 'active' : 'waiting'}`}
+              onClick={() => setShowDiagnostics(true)}
+              title="Click to view peer network diagnostics, latency & telemetry"
+            >
               <span
                 style={{
                   width: '6px',
@@ -571,6 +642,11 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                 {connectionCount > 0
                   ? (connectedNames.length > 0 ? connectedNames.join(', ') : (peerCaseeName || 'Partner'))
                   : 'No partner yet'}
+                {connectionCount > 0 && pingMs !== null && (
+                  <span style={{ marginLeft: '0.35rem', opacity: 0.75, fontSize: '0.7rem', fontWeight: 500 }}>
+                    ({pingMs}ms)
+                  </span>
+                )}
               </span>
             </div>
           </div>

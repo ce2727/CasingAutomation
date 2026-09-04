@@ -31,7 +31,20 @@ export interface DiagnosticEvent {
   timeStr: string;
   category: 'signaling' | 'ice' | 'data' | 'latency' | 'error';
   message: string;
+  peerId?: string;
   details?: any;
+}
+
+export interface PeerDiagnosticInfo {
+  peerId: string;
+  name: string;
+  pingMs: number | null;
+  detailedState: DetailedConnectionState;
+  iceConnectionState: string;
+  connectionState: string;
+  bufferedAmount: number;
+  localCandidates: string[];
+  events: DiagnosticEvent[];
 }
 
 export interface DiagnosticsSnapshot {
@@ -45,6 +58,7 @@ export interface DiagnosticsSnapshot {
   localCandidates: string[];
   bufferedAmount: number;
   events: DiagnosticEvent[];
+  peers: PeerDiagnosticInfo[];
 }
 
 export class PeerService {
@@ -64,12 +78,20 @@ export class PeerService {
 
   private detailedState: DetailedConnectionState = 'idle';
   private currentPing: number | null = null;
+  private peerPings: Map<string, number> = new Map();
+  private peerNames: Map<string, string> = new Map();
+  private heartbeatIntervals: Map<string, any> = new Map();
   private localCandidates: string[] = [];
   private diagnosticEvents: DiagnosticEvent[] = [];
-  private heartbeatInterval: any = null;
   private disconnectGraceTimer: any = null;
 
-  private logEvent(category: DiagnosticEvent['category'], message: string, details?: any) {
+  public setPeerName(peerId: string, name: string) {
+    if (peerId && name) {
+      this.peerNames.set(peerId, name);
+    }
+  }
+
+  private logEvent(category: DiagnosticEvent['category'], message: string, details?: any, peerId?: string) {
     const now = new Date();
     const timeStr = `${now.toTimeString().split(' ')[0]}.${now.getMilliseconds().toString().padStart(3, '0')}`;
     const event: DiagnosticEvent = {
@@ -77,10 +99,11 @@ export class PeerService {
       timeStr,
       category,
       message,
+      peerId,
       details,
     };
     this.diagnosticEvents.push(event);
-    if (this.diagnosticEvents.length > 50) {
+    if (this.diagnosticEvents.length > 80) {
       this.diagnosticEvents.shift();
     }
   }
@@ -148,12 +171,21 @@ export class PeerService {
   public onPingChange(callback: (pingMs: number) => void) { this.onPingChangeCallback = callback; }
 
   private startHeartbeat(conn: DataConnection) {
-    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-    this.heartbeatInterval = setInterval(() => {
+    this.stopHeartbeat(conn.peer);
+    const interval = setInterval(() => {
       if (!this.destroyed && conn.open) {
         conn.send({ type: 'PING', payload: { pingTime: Date.now() } });
       }
     }, 2000);
+    this.heartbeatIntervals.set(conn.peer, interval);
+  }
+
+  private stopHeartbeat(peerId: string) {
+    const existing = this.heartbeatIntervals.get(peerId);
+    if (existing) {
+      clearInterval(existing);
+      this.heartbeatIntervals.delete(peerId);
+    }
   }
 
   private hookConnectionDiagnostics(conn: DataConnection, cleanup: (reason?: string) => void) {
@@ -165,7 +197,7 @@ export class PeerService {
           const type = e.candidate.type || 'unknown';
           const proto = e.candidate.protocol || 'udp';
           this.localCandidates.push(`${type} (${proto})`);
-          this.logEvent('ice', `Local ICE candidate gathered: ${type} (${proto})`);
+          this.logEvent('ice', `Local ICE candidate gathered: ${type} (${proto})`, undefined, conn.peer);
           if (this.detailedState === 'signaling_ready') {
             this.setDetailedState('discovering_route');
           }
@@ -173,25 +205,25 @@ export class PeerService {
       });
 
       pc.addEventListener('iceconnectionstatechange', () => {
-        this.logEvent('ice', `ICE Connection State: ${pc.iceConnectionState}`);
+        this.logEvent('ice', `ICE Connection State: ${pc.iceConnectionState}`, undefined, conn.peer);
         if (pc.iceConnectionState === 'checking') {
           this.setDetailedState('connecting_peer');
         } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
           if (this.disconnectGraceTimer) {
             clearTimeout(this.disconnectGraceTimer);
             this.disconnectGraceTimer = null;
-            this.logEvent('ice', 'Connection recovered from temporary drop.');
+            this.logEvent('ice', 'Connection recovered from temporary drop.', undefined, conn.peer);
           }
           this.setDetailedState('connected');
         } else if (pc.iceConnectionState === 'failed') {
-          this.logEvent('error', 'ICE connection failed: Direct peer-to-peer route blocked by router/firewall (Symmetric NAT).');
+          this.logEvent('error', 'ICE connection failed: Direct peer-to-peer route blocked by router/firewall (Symmetric NAT).', undefined, conn.peer);
           cleanup('nat-firewall-blocked');
         } else if (pc.iceConnectionState === 'disconnected') {
           this.setDetailedState('reconnecting');
-          this.logEvent('ice', 'Connection interrupted (packet loss/jitter). Grace period 6s started...');
+          this.logEvent('ice', 'Connection interrupted (packet loss/jitter). Grace period 6s started...', undefined, conn.peer);
           if (!this.disconnectGraceTimer) {
             this.disconnectGraceTimer = setTimeout(() => {
-              this.logEvent('error', 'Disconnect grace period expired (6s).');
+              this.logEvent('error', 'Disconnect grace period expired (6s).', undefined, conn.peer);
               cleanup('connection-lost');
             }, 6000);
           }
@@ -199,7 +231,7 @@ export class PeerService {
       });
 
       pc.addEventListener('connectionstatechange', () => {
-        this.logEvent('ice', `Peer Connection State: ${pc.connectionState}`);
+        this.logEvent('ice', `Peer Connection State: ${pc.connectionState}`, undefined, conn.peer);
         if (pc.connectionState === 'connected') {
           if (this.disconnectGraceTimer) {
             clearTimeout(this.disconnectGraceTimer);
@@ -217,21 +249,24 @@ export class PeerService {
     this.currentRole = 'host';
     if (!this.peer) this.init();
     this.peer?.on('connection', (conn) => {
-      this.logEvent('signaling', `Incoming peer connection request from: ${conn.peer}`);
+      this.logEvent('signaling', `Incoming peer connection request from: ${conn.peer}`, undefined, conn.peer);
       if (this.connections.length >= 5) {
-        this.logEvent('error', 'Max connections reached. Rejecting incoming peer.');
+        this.logEvent('error', 'Max connections reached. Rejecting incoming peer.', undefined, conn.peer);
         conn.close();
         return;
       }
 
       const cleanup = (reason?: string) => {
+        this.stopHeartbeat(conn.peer);
+        this.peerPings.delete(conn.peer);
         if (this.disconnectGraceTimer) {
           clearTimeout(this.disconnectGraceTimer);
           this.disconnectGraceTimer = null;
         }
         const initialLength = this.connections.length;
         this.connections = this.connections.filter(c => c.peer !== conn.peer);
-        this.logEvent('ice', `Peer disconnected: ${conn.peer}. Remaining: ${this.connections.length} (Reason: ${reason || 'normal'})`);
+        const peerLabel = this.peerNames.get(conn.peer) ? `${this.peerNames.get(conn.peer)} (${conn.peer})` : conn.peer;
+        this.logEvent('ice', `Peer disconnected: ${peerLabel}. Remaining: ${this.connections.length} (Reason: ${reason || 'normal'})`, undefined, conn.peer);
         if (this.connections.length !== initialLength) {
           this.onConnectionChangeCallback?.(this.connections.length, this.connections.map(c => c.peer));
         }
@@ -244,7 +279,8 @@ export class PeerService {
       this.hookConnectionDiagnostics(conn, cleanup);
 
       conn.on('open', () => {
-        this.logEvent('data', `DataChannel opened with partner: ${conn.peer}`);
+        const peerLabel = this.peerNames.get(conn.peer) || conn.peer;
+        this.logEvent('data', `DataChannel opened with partner: ${peerLabel}`, undefined, conn.peer);
         this.connections.push(conn);
         this.setDetailedState('connected');
         this.onConnectionChangeCallback?.(this.connections.length, this.connections.map(c => c.peer));
@@ -265,9 +301,18 @@ export class PeerService {
         }
         if (data?.type === 'PONG') {
           const rtt = Math.max(1, Date.now() - (data.payload?.pingTime || 0));
+          this.peerPings.set(conn.peer, rtt);
           this.currentPing = rtt;
           this.onPingChangeCallback?.(rtt);
           return;
+        }
+
+        if (data?.type === 'PEER_INFO' && data?.payload?.name) {
+          const name = String(data.payload.name).trim();
+          if (name) {
+            this.peerNames.set(conn.peer, name);
+            this.logEvent('signaling', `Partner identified as: ${name}`, undefined, conn.peer);
+          }
         }
 
         if (data && typeof data === 'object') {
@@ -292,17 +337,19 @@ export class PeerService {
     }
 
     this.setDetailedState('discovering_route');
-    this.logEvent('signaling', `Initiating peer connection to host: ${hostId}`);
+    this.logEvent('signaling', `Initiating peer connection to host: ${hostId}`, undefined, hostId);
     const conn = this.peer.connect(hostId, { reliable: true });
 
     const cleanup = (reason?: string) => {
+      this.stopHeartbeat(conn.peer);
+      this.peerPings.delete(conn.peer);
       if (this.disconnectGraceTimer) {
         clearTimeout(this.disconnectGraceTimer);
         this.disconnectGraceTimer = null;
       }
       this.connections = [];
       this.currentPing = null;
-      this.logEvent('ice', `Connection to host terminated. (Reason: ${reason || 'closed'})`);
+      this.logEvent('ice', `Connection to host terminated. (Reason: ${reason || 'closed'})`, undefined, conn.peer);
       this.onConnectionChangeCallback?.(0);
       if (reason === 'nat-firewall-blocked') {
         this.setDetailedState('failed');
@@ -315,7 +362,7 @@ export class PeerService {
     this.hookConnectionDiagnostics(conn, cleanup);
 
     conn.on('open', () => {
-      this.logEvent('data', `DataChannel opened to host: ${hostId}`);
+      this.logEvent('data', `DataChannel opened to host: ${hostId}`, undefined, hostId);
       this.connections = [conn];
       this.setDetailedState('connected');
       this.onConnectionChangeCallback?.(1);
@@ -329,9 +376,17 @@ export class PeerService {
       }
       if (data?.type === 'PONG') {
         const rtt = Math.max(1, Date.now() - (data.payload?.pingTime || 0));
+        this.peerPings.set(conn.peer, rtt);
         this.currentPing = rtt;
         this.onPingChangeCallback?.(rtt);
         return;
+      }
+      if (data?.type === 'SESSION_INIT' && data?.payload?.caserName) {
+        const hostName = String(data.payload.caserName).trim();
+        if (hostName) {
+          this.peerNames.set(conn.peer, hostName);
+          this.logEvent('signaling', `Host identified as: ${hostName}`, undefined, conn.peer);
+        }
       }
       this.onMessageCallback?.(data as PeerMessage);
     });
@@ -376,6 +431,37 @@ export class PeerService {
     const pc = (activeConn as any)?.peerConnection as RTCPeerConnection | undefined;
     const dc = (activeConn as any)?.dataChannel as RTCDataChannel | undefined;
 
+    const peers: PeerDiagnosticInfo[] = this.connections.map(c => {
+      const cPc = (c as any)?.peerConnection as RTCPeerConnection | undefined;
+      const cDc = (c as any)?.dataChannel as RTCDataChannel | undefined;
+      const peerPing = this.peerPings.get(c.peer) ?? null;
+      const iceState = cPc?.iceConnectionState || 'none';
+      const connState = cPc?.connectionState || (c.open ? 'connected' : 'connecting');
+
+      let peerState: DetailedConnectionState = 'connecting_peer';
+      if (iceState === 'connected' || iceState === 'completed' || c.open) {
+        peerState = 'connected';
+      } else if (iceState === 'disconnected') {
+        peerState = 'reconnecting';
+      } else if (iceState === 'failed') {
+        peerState = 'failed';
+      }
+
+      const peerEvents = this.diagnosticEvents.filter(e => !e.peerId || e.peerId === c.peer);
+
+      return {
+        peerId: c.peer,
+        name: this.peerNames.get(c.peer) || 'Partner',
+        pingMs: peerPing,
+        detailedState: peerState,
+        iceConnectionState: iceState,
+        connectionState: connState,
+        bufferedAmount: cDc?.bufferedAmount || 0,
+        localCandidates: Array.from(new Set(this.localCandidates)),
+        events: peerEvents,
+      };
+    });
+
     return {
       role: this.currentRole,
       peerId: this.peer?.id || null,
@@ -387,12 +473,38 @@ export class PeerService {
       localCandidates: Array.from(new Set(this.localCandidates)),
       bufferedAmount: dc?.bufferedAmount || 0,
       events: [...this.diagnosticEvents],
+      peers,
     };
   }
 
-  public getDiagnosticLogText(): string {
+  public getDiagnosticLogText(selectedPeerId?: string): string {
     const diag = this.getDiagnostics();
     const dateStr = new Date().toLocaleString();
+    const targetPeer = selectedPeerId ? diag.peers.find(p => p.peerId === selectedPeerId) : null;
+
+    if (targetPeer) {
+      const lines = [
+        '==========================================',
+        '      PROCASE PEER DIAGNOSTIC LOG         ',
+        '==========================================',
+        `Generated: ${dateStr}`,
+        `Role: ${diag.role.toUpperCase()}`,
+        `Peer: ${targetPeer.name} (${targetPeer.peerId})`,
+        `Local Peer ID: ${diag.peerId || 'None'}`,
+        `Connection State: ${targetPeer.detailedState}`,
+        `ICE State: ${targetPeer.iceConnectionState}`,
+        `WebRTC State: ${targetPeer.connectionState}`,
+        `Current Latency (Ping): ${targetPeer.pingMs !== null ? `${targetPeer.pingMs} ms` : 'N/A'}`,
+        `DataChannel Buffer: ${(targetPeer.bufferedAmount / 1024).toFixed(1)} KB`,
+        `Local ICE Candidates: ${targetPeer.localCandidates.join(', ') || 'None gathered'}`,
+        '',
+        `--- TELEMETRY EVENTS (${targetPeer.name}) ---`,
+        ...targetPeer.events.map(e => `[${e.timeStr}] [${e.category.toUpperCase()}] ${e.message}`),
+        '==========================================',
+      ];
+      return lines.join('\n');
+    }
+
     const lines = [
       '==========================================',
       '      PROCASE NETWORK DIAGNOSTIC LOG      ',
@@ -417,10 +529,10 @@ export class PeerService {
 
   public destroy() {
     this.destroyed = true;
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
+    this.heartbeatIntervals.forEach(int => clearInterval(int));
+    this.heartbeatIntervals.clear();
+    this.peerPings.clear();
+    this.peerNames.clear();
     if (this.disconnectGraceTimer) {
       clearTimeout(this.disconnectGraceTimer);
       this.disconnectGraceTimer = null;

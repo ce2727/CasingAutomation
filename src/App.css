@@ -1807,6 +1807,12 @@ textarea:focus {
   gap: 0.4rem;
   font-size: 0.75rem;
   transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.connection-peers-box:hover {
+  filter: brightness(0.97);
+  transform: translateY(-1px);
 }
 
 .connection-peers-box.active {
@@ -1933,6 +1939,53 @@ textarea:focus {
   align-items: center;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border);
+}
+
+.diag-peer-tabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  background: #f1f5f9;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  align-items: center;
+}
+
+.diag-peer-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.diag-peer-tab:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.diag-peer-tab.active {
+  background: white;
+  color: #0f172a;
+  font-weight: 600;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.diag-peer-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .diag-grid {
