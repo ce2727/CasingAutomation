@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { libraryService, type CasePackage, type HistoryEntry, type HistoryOutcome, type ImportResult } from './services/LibraryService';
-import { peerService, type DetailedConnectionState, type DiagnosticsSnapshot } from './services/PeerService';
+import { peerService, type DetailedConnectionState, type DiagnosticsSnapshot, type PeerDiagnosticInfo } from './services/PeerService';
 import { pdfService } from './services/PdfService';
 import { CaseSlicer } from './components/CaseSlicer';
 import { PDFViewer } from './components/PDFViewer';
@@ -129,10 +129,12 @@ const NetworkDiagnosticsModal: React.FC<{
     setSnapshot(diag);
     if (initialPeerId && diag.peers.some(p => p.peerId === initialPeerId)) {
       setSelectedPeerId(initialPeerId);
-    } else if (diag.peers.length === 1) {
-      setSelectedPeerId(diag.peers[0].peerId);
-    } else if (diag.peers.length > 1 && selectedPeerId === 'all') {
-      setSelectedPeerId('all');
+    } else if (!initialPeerId) {
+      if (diag.peers.length === 1) {
+        setSelectedPeerId(diag.peers[0].peerId);
+      } else {
+        setSelectedPeerId('all');
+      }
     }
 
     const interval = setInterval(() => {
@@ -425,6 +427,15 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
   const [detailedState, setDetailedState] = useState<DetailedConnectionState>('idle');
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnosticsPeerId, setDiagnosticsPeerId] = useState<string | undefined>(undefined);
+  const [connectedPeers, setConnectedPeers] = useState<PeerDiagnosticInfo[]>([]);
+
+  useEffect(() => {
+    const updatePeers = () => setConnectedPeers(peerService.getDiagnostics().peers);
+    updatePeers();
+    const interval = setInterval(updatePeers, 1000);
+    return () => clearInterval(interval);
+  }, [connectionCount]);
 
   useEffect(() => {
     const load = async () => { const doc = await pdfService.loadDocument(caseFile.pdfBlob, caseFile.id); setTotalPages(doc.numPages); };
@@ -436,8 +447,14 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
     
     peerService.init(generatedId);
     peerService.onOpen(setPeerId);
-    peerService.onDetailedStateChange(setDetailedState);
-    peerService.onPingChange(setPingMs);
+    peerService.onDetailedStateChange((st) => {
+      setDetailedState(st);
+      setConnectedPeers(peerService.getDiagnostics().peers);
+    });
+    peerService.onPingChange((p) => {
+      setPingMs(p);
+      setConnectedPeers(peerService.getDiagnostics().peers);
+    });
     peerService.host();
     peerService.onConnectionCountChange((count, activePeerIds) => {
       setConnectionCount(count);
@@ -457,6 +474,7 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
         activePeersMapRef.current.clear();
         setConnectedNames([]);
       }
+      setConnectedPeers(peerService.getDiagnostics().peers);
     });
     peerService.onMessage(msg => {
       if (msg.type === 'PEER_INFO' && msg.payload?.name) {
@@ -467,11 +485,13 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
           allSessionUsersRef.current.add(name);
           if (msg.senderPeerId) {
             activePeersMapRef.current.set(msg.senderPeerId, name);
+            peerService.setPeerName(msg.senderPeerId, name);
           }
           const activeNames = activePeersMapRef.current.size > 0
             ? Array.from(new Set(Array.from(activePeersMapRef.current.values())))
             : Array.from(allSessionUsersRef.current);
           setConnectedNames(activeNames);
+          setConnectedPeers(peerService.getDiagnostics().peers);
         }
       }
     });
@@ -565,6 +585,22 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
     }
   };
 
+  const peersToRender = connectedPeers.length > 0
+    ? connectedPeers
+    : (connectionCount > 0 && connectedNames.length > 0
+      ? connectedNames.map((name, idx) => ({
+          peerId: `fallback-${idx}`,
+          name,
+          pingMs,
+          detailedState,
+          iceConnectionState: 'connected',
+          connectionState: 'connected',
+          bufferedAmount: 0,
+          localCandidates: [],
+          events: [],
+        }))
+      : []);
+
   return (
     <div className="session-layout">
       <header className="session-top-bar">
@@ -604,7 +640,10 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                 count={connectionCount}
                 detailedState={detailedState}
                 pingMs={pingMs}
-                onClick={() => setShowDiagnostics(true)}
+                onClick={() => {
+                  setDiagnosticsPeerId(undefined);
+                  setShowDiagnostics(true);
+                }}
               />
             </div>
             <div className="url-box-sm" style={{ marginTop: '0' }}>
@@ -620,34 +659,49 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
                 {copied ? <Check size={14} /> : <Copy size={14} />}
               </button>
             </div>
-            <div
-              className={`connection-peers-box ${connectionCount > 0 ? 'active' : 'waiting'}`}
-              onClick={() => setShowDiagnostics(true)}
-              title="Click to view peer network diagnostics, latency & telemetry"
-            >
-              <span
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  backgroundColor: connectionCount > 0 ? '#22c55e' : '#cbd5e1',
-                  display: 'inline-block',
-                  flexShrink: 0
-                }}
-              />
-              <span style={{ fontWeight: 600, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
-                {connectionCount > 0 ? 'Connected:' : 'Waiting:'}
-              </span>
-              <span style={{ fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {connectionCount > 0
-                  ? (connectedNames.length > 0 ? connectedNames.join(', ') : (peerCaseeName || 'Partner'))
-                  : 'No partner yet'}
-                {connectionCount > 0 && pingMs !== null && (
-                  <span style={{ marginLeft: '0.35rem', opacity: 0.75, fontSize: '0.7rem', fontWeight: 500 }}>
-                    ({pingMs}ms)
-                  </span>
-                )}
-              </span>
+            <div className="connection-peers-list">
+              {peersToRender.length === 0 ? (
+                <div
+                  className="connection-peer-item waiting"
+                  onClick={() => {
+                    setDiagnosticsPeerId(undefined);
+                    setShowDiagnostics(true);
+                  }}
+                  title="Click to view network diagnostics"
+                >
+                  <span className="peer-status-dot" style={{ backgroundColor: '#cbd5e1' }} />
+                  <span style={{ fontSize: '0.75rem' }}>Waiting for partner...</span>
+                </div>
+              ) : (
+                peersToRender.map((p) => {
+                  const peerName = activePeersMapRef.current.get(p.peerId) || (p.name && p.name !== 'Partner' ? p.name : (peerCaseeName || p.name || 'Partner'));
+                  const dotColor = p.detailedState === 'connected'
+                    ? (p.pingMs !== null ? (p.pingMs < 150 ? '#22c55e' : p.pingMs < 400 ? '#eab308' : '#f97316') : '#22c55e')
+                    : p.detailedState === 'reconnecting' ? '#f97316'
+                    : p.detailedState === 'failed' ? '#ef4444'
+                    : '#eab308';
+
+                  return (
+                    <div
+                      key={p.peerId}
+                      className="connection-peer-item"
+                      onClick={() => {
+                        setDiagnosticsPeerId(p.peerId.startsWith('fallback-') ? undefined : p.peerId);
+                        setShowDiagnostics(true);
+                      }}
+                      title={`Click to view diagnostics for ${peerName}`}
+                    >
+                      <div className="peer-item-left">
+                        <span className="peer-status-dot" style={{ backgroundColor: dotColor }} />
+                        <span className="peer-item-name">{peerName}</span>
+                      </div>
+                      <span className="peer-item-ping">
+                        {p.pingMs !== null ? `${p.pingMs}ms` : (p.detailedState === 'connected' ? 'connected' : p.detailedState)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
           <div className="exhibit-controls">
@@ -683,7 +737,14 @@ const CaserSession: React.FC<{ caseFile: CasePackage, userName: string, onBack: 
           </div>
         </div>
       </div>
-      <NetworkDiagnosticsModal isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
+      <NetworkDiagnosticsModal
+        isOpen={showDiagnostics}
+        onClose={() => {
+          setShowDiagnostics(false);
+          setDiagnosticsPeerId(undefined);
+        }}
+        initialPeerId={diagnosticsPeerId}
+      />
     </div>
   );
 };

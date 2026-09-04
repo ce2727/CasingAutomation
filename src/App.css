@@ -1827,6 +1827,80 @@ textarea:focus {
   color: #94a3b8;
 }
 
+.connection-peers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.connection-peer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background: white;
+  font-size: 0.775rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.connection-peer-item:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.connection-peer-item.waiting {
+  cursor: default;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.connection-peer-item.waiting:hover {
+  transform: none;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.peer-item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.peer-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.peer-item-name {
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-item-ping {
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  flex-shrink: 0;
+}
+
 /* --- Network Health Pill & Diagnostics --- */
 
 .connection-health-pill {
