@@ -25,3 +25,8 @@ dist-ssr
 .vercel
 release
 dist-electron
+
+# Environment variables
+.env
+.env.local
+.env.*.local

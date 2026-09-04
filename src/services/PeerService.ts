@@ -123,13 +123,44 @@ export class PeerService {
     this.logEvent('signaling', id ? `Initializing peer with requested ID: ${id}` : 'Initializing peer with random ID');
 
     try {
+      const meteredUser = (import.meta.env.VITE_METERED_USERNAME as string | undefined)?.trim();
+      const meteredCred = (import.meta.env.VITE_METERED_CREDENTIAL as string | undefined)?.trim();
+
+      const iceServers: RTCIceServer[] = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.relay.metered.ca:80' },
+      ];
+
+      if (meteredUser && meteredCred) {
+        iceServers.push(
+          {
+            urls: 'turn:global.relay.metered.ca:80',
+            username: meteredUser,
+            credential: meteredCred,
+          },
+          {
+            urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+            username: meteredUser,
+            credential: meteredCred,
+          },
+          {
+            urls: 'turn:global.relay.metered.ca:443',
+            username: meteredUser,
+            credential: meteredCred,
+          },
+          {
+            urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+            username: meteredUser,
+            credential: meteredCred,
+          }
+        );
+      }
+
       const options = { 
         debug: 1,
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
+          iceServers
         }
       };
 
