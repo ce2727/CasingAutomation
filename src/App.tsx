@@ -203,7 +203,7 @@ const NetworkDiagnosticsModal: React.FC<{ isOpen: boolean; onClose: () => void }
         </div>
 
         <div className="diag-footer">
-          <button className="btn btn-secondary" onClick={handleCopy} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button className="btn btn-ghost" onClick={handleCopy} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border)', fontSize: '0.875rem' }}>
             {copied ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
             {copied ? 'Diagnostic Log Copied!' : 'Copy Diagnostic Log'}
           </button>
@@ -1047,13 +1047,6 @@ const CaseeSession: React.FC<{
             >
               <RotateCcw size={16} style={{ marginRight: '0.35rem' }} /> Reconnect to Session
             </button>
-            <button
-              className="btn btn-secondary"
-              style={{ justifyContent: 'center' }}
-              onClick={() => setShowDiagnostics(true)}
-            >
-              <Activity size={16} style={{ marginRight: '0.35rem' }} /> View Diagnostics
-            </button>
             {hadSessionRef.current && isElectron && (
               <button
                 className="btn btn-ghost"
@@ -1070,6 +1063,15 @@ const CaseeSession: React.FC<{
             >
               Exit to Home
             </button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.25rem' }}>
+              <button
+                type="button"
+                className="btn-faded-dev"
+                onClick={() => setShowDiagnostics(true)}
+              >
+                <Activity size={13} /> View Diagnostics
+              </button>
+            </div>
           </div>
         </div>
         <NetworkDiagnosticsModal isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
@@ -1197,20 +1199,20 @@ const CaseeSession: React.FC<{
                 >
                   <RotateCcw size={16} style={{ marginRight: '0.4rem' }} /> Try Code "{joinIdRef.current}" Again
                 </button>
-                <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+                <button
+                  className="btn btn-ghost"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  onClick={handleForceExit}
+                >
+                  Back to Home
+                </button>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.25rem' }}>
                   <button
-                    className="btn btn-secondary"
-                    style={{ flex: 1, justifyContent: 'center' }}
+                    type="button"
+                    className="btn-faded-dev"
                     onClick={() => setShowDiagnostics(true)}
                   >
-                    <Activity size={15} style={{ marginRight: '0.35rem' }} /> Diagnostics
-                  </button>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ flex: 1, justifyContent: 'center' }}
-                    onClick={handleForceExit}
-                  >
-                    Back to Home
+                    <Activity size={13} /> Diagnostics
                   </button>
                 </div>
               </div>
@@ -1218,11 +1220,11 @@ const CaseeSession: React.FC<{
           ) : (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '1.25rem' }}>
               <button
-                className="btn btn-ghost btn-sm"
+                type="button"
+                className="btn-faded-dev"
                 onClick={() => setShowDiagnostics(true)}
-                style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}
               >
-                <Activity size={14} style={{ marginRight: '0.35rem' }} /> Live Diagnostics
+                <Activity size={13} /> Diagnostics
               </button>
               <button
                 className="btn btn-ghost btn-sm"
